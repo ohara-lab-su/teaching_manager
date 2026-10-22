@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teaching-manager"
+
+version = "0.0.0"
+
+description = "teaching manager"
+authors = [
+    { name = "Kengo NAKADA", email = "kengo.nakada@email.com" }
+]
+readme = "README.md"
+requires-python = ">=3.7"
+#requires-python = ">=3.8"
+#requires-python = ">=3.11"
+dependencies = [
+    #"x_logger",
+    "xlogger-py",
+    #
+    "pyside6",
+    #
+    "setuptools",
+    "python-dotenv",
+    "fastapi",
+    "fastapi-utils",
+    "uvicorn",
+    "pydantic",
+    "starlette",
+    "requests",
+    "aiohttp",
+    "httpx",
+    "pywin32; sys_platform == 'win32'",
+    "pygame; sys_platform == 'win32'",
+    "coloredlogs",
+    "colorlog",
+    #
+    "pytest",
+    "pytest-asyncio",
+    #
+    "pyyaml",
+    "toml",
+    "tomli; python_version < '3.11'",
+    #
+    "importlib-metadata>=4.0; python_version < '3.8'",
+    #
+    "nest_asyncio",
+    "sphinx",
+    "myst-parser",
+    "sphinx-autobuild",
+    "sphinx-rtd-theme",
+    "sphinxcontrib-napoleon",
+    "linkify-it-py",
+    #
+    "grpcio",
+    "grpcio-tools",
+    "google",
+    "pygame",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+# ここでpytestのiniと同じようにオプションが書ける
+# 例えばテストマーク、フィルタ、カバレッジなども追記可能
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
