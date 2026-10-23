@@ -36,92 +36,109 @@ LAST_P = 999
 
 
 class TeachingWindow(QMainWindow):
-    """P変数の一覧と現在位置を表示するQt画面（View）。"""
+    """P変数の読み取り操作と表示を担当するQt画面（View）。
+
+    データ取得はTeachingModelへ委譲する。実機への書き込みは行わない。
+    """
 
     def __init__(self, model: TeachingModel) -> None:
         super().__init__()
-        self.model = model
+        self._model = model
         self.setWindowTitle("P座標ティーチング（読み取りテスト）")
         self.resize(920, 620)
 
         main = QWidget()
         self.setCentralWidget(main)
         layout = QVBoxLayout(main)
-        self.status = QLabel()
+        self._status = QLabel()
 
-        layout.addWidget(self.status)
+        layout.addWidget(self._status)
         row = QHBoxLayout()
-        self.robot_button = QPushButton("ロボットから全P変数を読み込む")
-        self.robot_button.clicked.connect(lambda: self.execute(self.model.read_robot))
-
-        row.addWidget(self.robot_button)
-        self.file_button = QPushButton("JSONファイルから読み込む")
-        self.file_button.clicked.connect(lambda: self.execute(self.model.load_file))
-
-        row.addWidget(self.file_button)
-        layout.addLayout(row)
-        self.position_label = QLabel("現在位置: 未取得")
-
-        layout.addWidget(self.position_label)
-        self.position_button = QPushButton("ロボットの現在P座標を取得")
-        self.position_button.clicked.connect(
-            lambda: self.execute(self.model.read_current_position)
+        self._robot_button = QPushButton("ロボットから指定範囲のP変数を読み込む")
+        self._robot_button.clicked.connect(
+            lambda: self._execute_robot_read()
         )
-        layout.addWidget(self.position_button)
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["P番号", "座標（読み取り専用）"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
-        layout.addWidget(self.table)
-        row = QHBoxLayout()
-        self.auto_button = QPushButton("空き番号にティーチング（テスト中：無効）")
-        self.auto_button.setEnabled(False)
+        row.addWidget(self._robot_button)
+        row.addWidget(QLabel("開始P番号"))
+        self._start_number = QSpinBox()
+        self._start_number.setRange(FIRST_P, LAST_P)
+        self._start_number.setValue(0)
+        row.addWidget(self._start_number)
+        row.addWidget(QLabel("終了P番号"))
+        self._end_number = QSpinBox()
+        self._end_number.setRange(FIRST_P, LAST_P)
+        self._end_number.setValue(20)
+        row.addWidget(self._end_number)
+        self._file_button = QPushButton("JSONファイルから読み込む")
+        self._file_button.clicked.connect(lambda: self.execute(self._model.load_file))
 
-        row.addWidget(self.auto_button)
-        row.addWidget(QLabel("指定P番号"))
-        self.number = QSpinBox()
-        self.number.setRange(FIRST_P, LAST_P)
-
-        row.addWidget(self.number)
-        self.spec_button = QPushButton("指定番号にティーチング（テスト中：無効）")
-        self.spec_button.setEnabled(False)
-
-        row.addWidget(self.spec_button)
+        row.addWidget(self._file_button)
         layout.addLayout(row)
-        self.hint = QLabel(
+        self._position_label = QLabel("現在位置: 未取得")
+
+        layout.addWidget(self._position_label)
+        self._position_button = QPushButton("ロボットの現在P座標を取得")
+        self._position_button.clicked.connect(
+            lambda: self.execute(self._model.read_current_position)
+        )
+        layout.addWidget(self._position_button)
+        self._table = QTableWidget(0, 2)
+        self._table.setHorizontalHeaderLabels(["P番号", "座標（読み取り専用）"])
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        layout.addWidget(self._table)
+        row = QHBoxLayout()
+        self._auto_button = QPushButton("空き番号にティーチング（テスト中：無効）")
+        self._auto_button.setEnabled(False)
+
+        row.addWidget(self._auto_button)
+        row.addWidget(QLabel("指定P番号"))
+        self._number = QSpinBox()
+        self._number.setRange(FIRST_P, LAST_P)
+
+        row.addWidget(self._number)
+        self._spec_button = QPushButton("指定番号にティーチング（テスト中：無効）")
+        self._spec_button.setEnabled(False)
+
+        row.addWidget(self._spec_button)
+        layout.addLayout(row)
+        self._hint = QLabel(
             "書き込みは完全無効。ロボットからの読込ではJSONを変更しません。"
         )
-        layout.addWidget(self.hint)
-        self.model.load_file()
+        layout.addWidget(self._hint)
+        self._model.load_file()
         self.refresh()
+
+    def _execute_robot_read(self) -> None:
+        """画面で指定した範囲のP変数をロボットから取得する。"""
+        start = self._start_number.value()
+        end = self._end_number.value()
+        self.execute(lambda: self._model.read_robot(start, end))
 
     def refresh(self) -> None:
         """Modelの保持状態を画面に反映する。"""
-        connected = self.model.robot is not None
-        self.status.setText(
-            f"表示元: {self.model.source} / 接続: {'あり' if connected else 'なし'} / P変数: {len(self.model.positions)}件"
+        connected = self._model.robot is not None
+        self._status.setText(
+            f"表示元: {self._model.source} / 接続: {'あり' if connected else 'なし'} / P変数: {len(self._model.positions)}件"
         )
-        self.robot_button.setEnabled(connected)
-        self.position_button.setEnabled(connected)
-        keys = sorted(self.model.positions, key=lambda key: int(key[1:]))
-        self.table.setRowCount(len(keys))
+        self._robot_button.setEnabled(connected)
+        self._position_button.setEnabled(connected)
+        keys = sorted(self._model.positions, key=lambda key: int(key[1:]))
+        self._table.setRowCount(len(keys))
         for row, key in enumerate(keys):
-            self.table.setItem(row, 0, QTableWidgetItem(key))
-            self.table.setItem(
+            self._table.setItem(row, 0, QTableWidgetItem(key))
+            self._table.setItem(
                 row,
                 1,
                 QTableWidgetItem(
-                    json.dumps(self.model.positions[key], ensure_ascii=False)
+                    json.dumps(self._model.positions[key], ensure_ascii=False)
                 ),
             )
-        if self.model.current_position is not None:
-            self.position_label.setText("現在位置: " + str(self.model.current_position))
-        available = self.model.first_unused(FIRST_P, LAST_P)
-        if available is not None:
-            self.hint.setText(
-                f"取得結果のキーに存在しない最初の番号: P{available}（未使用確定ではありません） / 書込無効"
-            )
+        if self._model.current_position is not None:
+            self._position_label.setText("現在位置: " + str(self._model.current_position))
+        self._hint.setText("読み取りテスト版：書き込み無効。空き番号は判定しません。")
 
     def execute(self, action: Any) -> None:
         """読み取り操作を実行し、成功時に画面を更新する。"""
