@@ -103,6 +103,7 @@ class TeachingWindow(QMainWindow):
         self._position_button.clicked.connect(self._read_current_position)
         self._worker: _OperationWorker | None = None
         self._closing = False
+        self._close_approved = False
         self._busy = False
         layout.addWidget(self._position_button)
         self._table = QTableWidget(0, 2)
@@ -156,7 +157,7 @@ class TeachingWindow(QMainWindow):
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "P変数のJSONファイルを開く",
-            self._controller.json_filename,
+            self._json_file,
             "JSONファイル (*.json);;すべてのファイル (*)",
         )
         if not filename:
@@ -173,13 +174,57 @@ class TeachingWindow(QMainWindow):
         self._run_operation(lambda: self._controller.load_initial(start, end), "初期読込")
 
     def closeEvent(self, event: Any) -> None:
-        """通信中は閉じず、処理終了後に閉じる。GUIスレッドでwaitしない。"""
+        """未保存の変更がある場合に、同期・保存するか確認する。"""
         if self._worker is not None:
             self._closing = True
-            self._status.setText("通信処理の終了後に閉じます...")
+            self._status.setText("処理終了後に終了確認を行います...")
             event.ignore()
             return
-        super().closeEvent(event)
+        if self._close_approved:
+            event.accept()
+            return
+        if not self._controller.has_unsaved_changes:
+            if not self._controller.has_robot_changes:
+                event.accept()
+                return
+        message = (
+            "一覧の変更が保存されていません。\n"
+            "保存しないで終了すると、未保存の内容は失われます。\n\n"
+            "Yes: デフォルトJSONへ保存して終了\n"
+            "No: 保存せず終了"
+        )
+        if self._controller.uses_robot_memory:
+            message = (
+                "一覧の内容をCobotta内部P変数とJSONに同期しますか？\n"
+                "Yes: 変更されたP変数を実機へ書き込み、JSONへ保存して終了\n"
+                "No: 同期・保存せず終了（未保存の内容は失われます）\n\n"
+                "※一覧から削除した番号は実機から削除されません。"
+            )
+        reply = QMessageBox.question(
+            self,
+            "終了時の保存確認",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No |
+            QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply == QMessageBox.StandardButton.Cancel:
+            event.ignore()
+            return
+        if reply == QMessageBox.StandardButton.No:
+            event.accept()
+            return
+        event.ignore()
+        self._run_operation(
+            self._controller.save_on_close,
+            "終了時の同期・保存",
+            on_success=self._close_after_save,
+        )
+
+    def _close_after_save(self, result: Any) -> None:
+        """保存が成功した場合だけ終了する。"""
+        self._close_approved = True
+        self._closing = True
 
     def _run_operation(
         self,
@@ -227,6 +272,7 @@ class TeachingWindow(QMainWindow):
             worker.deleteLater()
         self._set_busy(False)
         if self._closing:
+            self._closing = False
             self.close()
 
     def _set_busy(self, busy: bool) -> None:
@@ -485,13 +531,20 @@ class TeachingWindow(QMainWindow):
             QMessageBox.warning(self, "空き番号の判定不可", str(exc))
 
     def _save_file(self) -> None:
-        """表示中のP変数をJSONへ保存する。"""
+        """保存先を選択し、表示中のP変数をJSONへ書き出す。"""
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "P変数のJSONファイルを保存",
+            self._json_file,
+            "JSONファイル (*.json);;すべてのファイル (*)",
+        )
+        if not filename:
+            return
         self._run_operation(
-            self._controller.save_file,
+            lambda: self._controller.save_file(filename),
             "JSON保存",
             on_success=lambda result: QMessageBox.information(
-                self, "保存完了", f"JSONへ保存しました: {self._json_file}"
+                self, "保存完了", f"JSONへ保存しました: {filename}"
             ),
         )
-
 

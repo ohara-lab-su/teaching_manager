@@ -14,6 +14,7 @@
 """
 
 import asyncio
+import copy
 import inspect
 import json
 import os
@@ -43,6 +44,58 @@ class TeachingModel:
         self._positions: Dict[str, Any] = {}
         self._current_position: Any = None
         self._uses_robot_memory = True
+        self._saved_positions: Dict[str, Any] = {}
+        self._robot_positions: Dict[str, Any] = {}
+
+    @property
+    def has_unsaved_changes(self) -> bool:
+        """表示内容が最後に保存したJSON相当の状態と異なるかを返す。"""
+        return self._positions != self._saved_positions
+
+    @property
+    def has_robot_changes(self) -> bool:
+        """Cobotta内部値と表示中のP変数に差があるかを返す。"""
+        if not self._uses_robot_memory:
+            return False
+        for key, value in self._positions.items():
+            if key not in self._robot_positions:
+                return True
+            if self._robot_positions[key] != value:
+                return True
+        return False
+
+    def sync_robot(self) -> None:
+        """表示中の変更されたP変数のみをCobottaに書き込み、読み戻す。
+
+        一覧から削除した番号は対象外とし、実機の値を削除しない。
+        """
+        if not self._uses_robot_memory:
+            return
+        if self.robot is None:
+            raise RuntimeError("ロボットが接続されていません")
+        for key, value in self._positions.items():
+            if key in self._robot_positions:
+                if self._robot_positions[key] == value:
+                    continue
+            number = int(key[1:])
+            result = self.robot.set_var("P", number, value)
+            if inspect.isawaitable(result):
+                raise RuntimeError("書き込みには同期DeviceProxyが必要です")
+            if result is False:
+                raise RuntimeError(f"{key}への書き込みに失敗しました")
+            readback = self.robot.get_var("P", number)
+            if inspect.isawaitable(readback):
+                raise RuntimeError("読み戻しには同期DeviceProxyが必要です")
+            if readback is False or readback is None:
+                raise RuntimeError(f"{key}の読み戻しに失敗しました")
+            self._robot_positions[key] = copy.deepcopy(readback)
+            self._positions[key] = readback
+            self._manager.set_var(key, readback, save=False)
+
+    def save_on_close(self) -> None:
+        """終了時にCobottaへの同期後、デフォルトJSONへ保存する。"""
+        self.sync_robot()
+        self.save_file(allow_empty=True)
 
     def set_storage_mode(self, uses_robot_memory: bool) -> None:
         """P変数の保存先を設定する。Controllerがデバイス名から決定する。
@@ -100,6 +153,7 @@ class TeachingModel:
             if filename is not None:
                 raise FileNotFoundError(f"JSONファイルが見つかりません: {path}")
             self._positions = {}
+            self._saved_positions = {}
             self._source = "JSON（ファイルなし）"
             return
         with path.open(encoding="utf-8") as stream:
@@ -107,6 +161,7 @@ class TeachingModel:
         if not isinstance(data, dict):
             raise ValueError("JSONのルートは辞書である必要があります")
         self._positions = self._only_p(data)
+        self._saved_positions = copy.deepcopy(self._positions)
         self._source = "JSON"
 
     def read_robot(self, start: int, end: int) -> None:
@@ -147,6 +202,8 @@ class TeachingModel:
         for key, value in result.items():
             self._manager.set_var(key, value, save=False)
         self._positions = result
+        self._robot_positions = copy.deepcopy(result)
+        self._saved_positions = copy.deepcopy(result)
         self._source = f"ロボット（P{start}～P{end}）"
 
     @property
@@ -190,6 +247,7 @@ class TeachingModel:
         self,
         allow_empty: bool = False,
         data: Optional[Dict[str, Any]] = None,
+        filename: Optional[str] = None,
     ) -> None:
         """現在画面に表示しているP変数をJSONへ保存する。
 
@@ -201,7 +259,10 @@ class TeachingModel:
             raise ValueError(
                 "保存対象のP変数がありません。先にロボットから読み込んでください"
             )
-        self._filename.parent.mkdir(parents=True, exist_ok=True)
+        path = self._filename
+        if filename is not None:
+            path = Path(filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
         # JSONへ書く内容は表示中のP変数だけ。マネージャーの他種変数は含めない。
 
         temporary_name = None
@@ -209,8 +270,8 @@ class TeachingModel:
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
-                dir=self._filename.parent,
-                prefix=f".{self._filename.name}.",
+                dir=path.parent,
+                prefix=f".{path.name}.",
                 suffix=".tmp",
                 delete=False,
             ) as stream:
@@ -218,7 +279,8 @@ class TeachingModel:
                 json.dump(values, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary_name, self._filename)
+            os.replace(temporary_name, path)
+            self._saved_positions = copy.deepcopy(values)
         finally:
             if temporary_name is not None and os.path.exists(temporary_name):
                 os.unlink(temporary_name)
@@ -262,6 +324,7 @@ class TeachingModel:
             )
         self._manager.set_var(f"P{number}", readback, save=False)
         self._positions[f"P{number}"] = readback
+        self._robot_positions[f"P{number}"] = copy.deepcopy(readback)
         self._source = "ロボット（書き込み後）"
         return readback
 
@@ -301,6 +364,7 @@ class TeachingModel:
             raise RuntimeError(f"P{number}のクリア値が一致しません: {readback!r}")
         self._manager.set_var(f"P{number}", readback, save=False)
         self._positions[f"P{number}"] = readback
+        self._robot_positions[f"P{number}"] = copy.deepcopy(readback)
         self._source = "ロボット（クリア後）"
         return readback
 

@@ -17,7 +17,14 @@ from teaching_manager.teaching_controller import TeachingController
 from teaching_manager.teaching_gui import TeachingWindow
 from x_logger import XLogger
 
-JSON_FILE = str(ROOT / "robot_positions.json")
+# JSONの既定値。フォルダとファイル名の両方を変更できる。
+# 相対パスを指定した場合も、起動スクリプトの場所を基準に解決する。
+JSON_FILE = "robot_positions.json"
+JSON_PATH = Path(JSON_FILE)
+
+if not JSON_PATH.is_absolute():
+    JSON_PATH = Path(__file__).resolve().parent / JSON_PATH
+JSON_FILE = str(JSON_PATH.resolve())
 
 
 def main() -> None:
@@ -39,7 +46,6 @@ def main() -> None:
     config = Config("config_cobotta3_server5.yaml")
 
     device_name = "CobottaCtrl"
-
     robot = DeviceProxy(
         device_name,
         config=config,

@@ -79,9 +79,9 @@ class TeachingController:
         """指定したJSONを読み込む。省略時はデフォルトファイルを使う。"""
         self._model.load_file(filename)
 
-    def save_file(self) -> None:
-        """表示中の一覧をJSONへ保存する。"""
-        self._model.save_file()
+    def save_file(self, filename: str | None = None) -> None:
+        """指定したJSONへ一覧を保存する。省略時は既定の保存先を使う。"""
+        self._model.save_file(filename=filename)
 
     def read_current_position(self) -> Any:
         """現在位置を取得する。同期/非同期モードはModel設定に従う。"""
@@ -126,3 +126,17 @@ class TeachingController:
     ) -> None:
         """一覧から削除する。JSON管理ではファイルにも反映する。"""
         self._model.delete_numbers(numbers)
+
+    @property
+    def has_unsaved_changes(self) -> bool:
+        """JSON未保存の変更があるかを返す。"""
+        return self._model.has_unsaved_changes
+
+    @property
+    def has_robot_changes(self) -> bool:
+        """Cobotta内部値との不一致があるかを返す。"""
+        return self._model.has_robot_changes
+
+    def save_on_close(self) -> None:
+        """終了時の実機同期とデフォルトJSON保存を実行する。"""
+        self._model.save_on_close()
