@@ -1,177 +1,487 @@
-#!/usr/bin/env python
-"""P座標専用ティーチングGUI。実機の現在位置取得は呼び出し側で注入する。"""
+"""P座標ティーチングGUIのティーチング・JSON保存版。
 
+Qtによる表示とボタン操作を担当する。データ取得と保持はTeachingModelに委譲する。
+実機への書き込みはユーザーが確認した指定番号に限定する。
+"""
+
+import asyncio
+import inspect
 import json
+import sys
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Signal, QTimer
 from PySide6.QtWidgets import (
     QApplication,
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
-    QMessageBox,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
     QPushButton,
+    QLabel,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
-    QVBoxLayout,
-    QWidget,
+    QMessageBox,
+    QMenu,
+    QAbstractItemView,
+    QHeaderView,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 from teaching_manager.robot_var_manager import RobotVarManager
+from teaching_manager.teaching_model import TeachingModel
+from teaching_manager.teaching_controller import TeachingController
 
-JSON_FILENAME = "robot_positions.json"
-MIN_P_NUMBER = 0
-MAX_P_NUMBER = 999
+from x_logger import XLogger
+
+JSON_FILE = str(ROOT / "robot_positions.json")
+FIRST_P = 0
+LAST_P = 999
 
 
-class TeachingService:
-    """空き番号のみ登録。robot は P番号属性の読み書きができる場合に接続する。"""
+class _PositionWorker(QThread):
+    """現在位置取得をGUIスレッド外で実行する読み取り専用ワーカー。"""
 
-    def __init__(
-        self,
-        manager: RobotVarManager,
-        get_current_pose: Callable[[], Any],
-        robot: Optional[Any] = None,
-    ) -> None:
-        self.manager = manager
-        self.get_current_pose = get_current_pose
-        self.robot = robot
-        self._validate_loaded()
+    succeeded = Signal()
+    failed = Signal(str)
 
-    def _validate_loaded(self) -> None:
-        for key in self.manager.list_vars():
-            if key.startswith("P"):
-                number = key[1:]
-                if not number.isdecimal():
-                    raise ValueError(f"不正なP変数名: {key}")
+    def __init__(self, controller: TeachingController) -> None:
+        super().__init__()
+        self._controller = controller
 
-    def used_numbers(self) -> set[int]:
-        return {
-            int(k[1:])
-            for k in self.manager.list_vars()
-            if k.startswith("P") and k[1:].isdecimal()
-        }
-
-    def first_free(self) -> int:
-        used = self.used_numbers()
-        for number in range(MIN_P_NUMBER, MAX_P_NUMBER + 1):
-            if number not in used:
-                return number
-        raise RuntimeError("空きP番号がありません")
-
-    def teach(self, number: int) -> str:
-        if not MIN_P_NUMBER <= number <= MAX_P_NUMBER:
-            raise ValueError("番号が許容範囲外です")
-        key = f"P{number}"
-        if number in self.used_numbers():
-            raise ValueError(f"{key} は登録済みです。上書きしません")
-        pose = self.get_current_pose()
-        json.dumps(pose)  # JSONシリアライズ可能であることを先に確認
-        if not isinstance(pose, (list, tuple)):
-            raise ValueError("現在位置はP座標の配列で返してください")
-        pose = list(pose)
-        if not pose:
-            raise ValueError("空のP座標は登録できません")
-        # 実機側の既存変数は消去済みとみなせない。既存値との一致は保証できないため拒否。
-        if self.robot is not None:
-            old = getattr(self.robot, key)
-            if old is not None and old is not False:
-                raise RuntimeError(f"実機の {key} に値があります。上書き防止のため中止")
-            setattr(self.robot, key, pose)
-            confirmed = getattr(self.robot, key)
-            if confirmed != pose:
-                raise RuntimeError(
-                    f"実機の {key} の書込検証に失敗しました。JSONには保存していません"
-                )
-        self.manager.set_var("P", number, pose, save=True)
-        return key
+    def run(self) -> None:
+        """同期・非同期いずれのDeviceProxy呼び出しも画面を止めずに処理する。"""
+        try:
+            result = self._controller.read_current_position()
+            if inspect.isawaitable(result):
+                asyncio.run(result)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+        self.succeeded.emit()
 
 
 class TeachingWindow(QMainWindow):
-    def __init__(self, service: TeachingService) -> None:
+    """P変数の読み取り操作と表示を担当するQt画面（View）。
+
+    データ取得はTeachingModelへ委譲する。実機への書き込みは行わない。
+    """
+
+    def __init__(self, controller: TeachingController) -> None:
         super().__init__()
-        self.service = service
+        self._controller = controller
         self.setWindowTitle("P座標ティーチング")
-        self.resize(700, 500)
-        root = QWidget()
-        layout = QVBoxLayout(root)
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["番号", "P座標 (JSON)"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        layout.addWidget(self.table)
-        controls = QHBoxLayout()
-        self.auto_button = QPushButton("空き番号へティーチング")
-        self.auto_button.clicked.connect(self.teach_auto)
-        controls.addWidget(self.auto_button)
-        controls.addWidget(QLabel("指定番号:"))
-        self.number = QSpinBox()
-        self.number.setRange(MIN_P_NUMBER, MAX_P_NUMBER)
-        controls.addWidget(self.number)
-        self.specific_button = QPushButton("指定番号へティーチング")
-        self.specific_button.clicked.connect(self.teach_specific)
-        controls.addWidget(self.specific_button)
-        layout.addLayout(controls)
-        self.status = QLabel()
-        layout.addWidget(self.status)
-        self.setCentralWidget(root)
+        self.resize(920, 620)
+
+        main = QWidget()
+        self.setCentralWidget(main)
+        layout = QVBoxLayout(main)
+        self._status = QLabel()
+
+        layout.addWidget(self._status)
+        row = QHBoxLayout()
+        self._robot_button = QPushButton("ロボットから指定範囲のP変数を読み込む")
+        self._robot_button.clicked.connect(lambda: self._execute_robot_read())
+        self._robot_button.setEnabled(controller.uses_robot_memory)
+
+        row.addWidget(self._robot_button)
+        row.addWidget(QLabel("開始P番号"))
+        self._start_number = QSpinBox()
+        self._start_number.setRange(FIRST_P, LAST_P)
+        self._start_number.setValue(0)
+        row.addWidget(self._start_number)
+        row.addWidget(QLabel("終了P番号"))
+        self._end_number = QSpinBox()
+        self._end_number.setRange(FIRST_P, LAST_P)
+        self._end_number.setValue(20)
+        row.addWidget(self._end_number)
+        self._file_button = QPushButton("JSONファイルから読み込む")
+        self._file_button.clicked.connect(
+            lambda: self.execute(self._controller.load_file)
+        )
+
+        row.addWidget(self._file_button)
+        layout.addLayout(row)
+        self._position_label = QLabel("現在位置: 未取得")
+
+        layout.addWidget(self._position_label)
+        self._position_button = QPushButton("ロボットの現在P座標を取得")
+        self._position_button.clicked.connect(self._read_current_position)
+        self._position_worker: _PositionWorker | None = None
+        layout.addWidget(self._position_button)
+        self._table = QTableWidget(0, 2)
+        self._table.setHorizontalHeaderLabels(["P番号", "座標"])
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._table.setContextMenuPolicy(
+            __import__(
+                "PySide6.QtCore", fromlist=["Qt"]
+            ).Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self._table.customContextMenuRequested.connect(self._show_table_menu)
+        self._table.itemSelectionChanged.connect(self._sync_selected_number)
+        layout.addWidget(self._table)
+        row = QHBoxLayout()
+        self._auto_button = QPushButton("空き番号にティーチング")
+        self._auto_button.clicked.connect(self._teach_unused)
+
+        row.addWidget(self._auto_button)
+        self._save_button = QPushButton("現在の一覧をJSONファイルに保存")
+        self._save_button.clicked.connect(self._save_file)
+        row.addWidget(self._save_button)
+        row.addWidget(QLabel("指定P番号"))
+        self._number = QSpinBox()
+        self._number.setRange(FIRST_P, LAST_P)
+
+        row.addWidget(self._number)
+        self._spec_button = QPushButton("指定P番号に現在位置を書き込む")
+        self._spec_button.clicked.connect(self._teach_specified)
+        self._selected_button = QPushButton("選択したP番号に現在位置を書き込む")
+        self._selected_button.clicked.connect(self._teach_selected)
+        row.addWidget(self._selected_button)
+
+        row.addWidget(self._spec_button)
+        layout.addLayout(row)
+        self._hint = QLabel(
+            "Cobotta: 実機P変数を更新（JSON保存は手動）。その他: P変数はJSONに自動保存。"
+        )
+        layout.addWidget(self._hint)
+        self.refresh()
+        # Qtのイベントループ開始後に初期読込を行う。
+        QTimer.singleShot(0, self._load_initial_data)
+
+    def _load_initial_data(self) -> None:
+        """デバイス名に基づきCobottaは実機、それ以外はJSONを読み込む。"""
+        self.execute(
+            lambda: self._controller.load_initial(
+                self._start_number.value(), self._end_number.value()
+            )
+        )
+
+    def closeEvent(self, event: Any) -> None:
+        """現在位置取得スレッドの終了を待ち、安全にウィンドウを閉じる。
+
+        通信処理中のQThreadを破棄しない。終了待ちの間はQt画面が停止する。
+        """
+        if self._position_worker is not None and self._position_worker.isRunning():
+            self._position_worker.wait()
+        super().closeEvent(event)
+
+    def _read_current_position(self) -> None:
+        """現在位置取得を別スレッドで開始し、完了後に画面へ反映する。"""
+        if self._position_worker is not None:
+            return
+        self._position_button.setEnabled(False)
+        self._position_label.setText("現在位置: 取得中...")
+        worker = _PositionWorker(self._controller)
+        self._position_worker = worker
+        worker.succeeded.connect(self._position_read_succeeded)
+        worker.failed.connect(self._position_read_failed)
+        worker.finished.connect(self._position_read_finished)
+        worker.start()
+
+    def _position_read_succeeded(self) -> None:
+        """取得した現在位置を表示する。"""
         self.refresh()
 
+    def _position_read_failed(self, message: str) -> None:
+        """取得エラーを表示する。"""
+        self._position_label.setText("現在位置: 取得失敗")
+        QMessageBox.critical(self, "現在位置取得失敗", message)
+
+    def _position_read_finished(self) -> None:
+        """取得終了後にボタンとワーカー参照を復旧する。"""
+        self._position_button.setEnabled(self._controller.model.robot is not None)
+        if self._position_worker is not None:
+            self._position_worker.deleteLater()
+        self._position_worker = None
+
+    def _execute_robot_read(self) -> None:
+        """画面で指定した範囲のP変数をロボットから取得する。"""
+        start = self._start_number.value()
+        end = self._end_number.value()
+        self.execute(lambda: self._controller.read_robot(start, end))
+
     def refresh(self) -> None:
-        entries = [
-            (k, self.service.manager.get_var(k))
-            for k in self.service.manager.list_vars()
-            if k.startswith("P")
-        ]
-        entries.sort(key=lambda entry: int(entry[0][1:]))
-        self.table.setRowCount(len(entries))
-        for row, (key, value) in enumerate(entries):
-            self.table.setItem(row, 0, QTableWidgetItem(key))
-            self.table.setItem(
-                row, 1, QTableWidgetItem(json.dumps(value, ensure_ascii=False))
+        """Modelの保持状態を画面に反映する。"""
+        connected = self._controller.model.robot is not None
+        self._status.setText(
+            f"表示元: {self._controller.model.source} / 接続: {'あり' if connected else 'なし'} / P変数: {len(self._controller.model.positions)}件"
+        )
+        self._robot_button.setEnabled(connected)
+        self._position_button.setEnabled(connected)
+        keys = sorted(self._controller.model.positions, key=lambda key: int(key[1:]))
+        self._table.setRowCount(len(keys))
+        for row, key in enumerate(keys):
+            self._table.setItem(row, 0, QTableWidgetItem(key))
+            self._table.setItem(
+                row,
+                1,
+                QTableWidgetItem(
+                    json.dumps(
+                        self._controller.model.positions[key], ensure_ascii=False
+                    )
+                ),
             )
-        try:
-            self.status.setText(f"次の空き番号: P{self.service.first_free()}")
-        except RuntimeError:
-            self.status.setText("空き番号なし")
+        if self._controller.model.current_position is not None:
+            self._position_label.setText(
+                "現在位置: " + str(self._controller.model.current_position)
+            )
+        self._hint.setText("選択行への書き込みは確認後に実行。JSON保存は別操作です。")
 
-    def teach_auto(self) -> None:
+    def _selected_number(self) -> int:
+        """選択行からP番号を取得する。"""
+        row = self._table.currentRow()
+        if row < 0:
+            raise ValueError("一覧からP番号を選択してください")
+        item = self._table.item(row, 0)
+        if item is None:
+            raise ValueError("P番号が取得できません")
+        return int(item.text()[1:])
+
+    def _sync_selected_number(self) -> None:
+        """一覧で選んだP番号を指定番号欄にも反映する。"""
         try:
-            self._teach(self.service.first_free())
+            self._number.setValue(self._selected_number())
+        except ValueError:
+            return
+
+    def _show_table_menu(self, point: Any) -> None:
+        """右クリック時に複数選択を保持して、書き込み・削除メニューを表示する。"""
+        item = self._table.itemAt(point)
+        if item is None:
+            return
+        # 既存の複数選択を維持する。選択外の行を右クリックした場合だけ、その行を選択する。
+        if not self._table.selectionModel().isRowSelected(
+            item.row(), self._table.rootIndex()
+        ):
+            self._table.clearSelection()
+            self._table.selectRow(item.row())
+        menu = QMenu(self)
+        action = menu.addAction("選択したP番号に現在位置を書き込む")
+        delete_action = menu.addAction("選択したP番号を0クリア（未使用値を書き込む）")
+        remove_action = menu.addAction("選択したP番号を一覧から削除")
+        chosen = menu.exec(self._table.viewport().mapToGlobal(point))
+        if chosen == action:
+            self._teach_selected()
+        if chosen == delete_action:
+            self._clear_selected()
+        if chosen == remove_action:
+            self._delete_selected()
+
+    def _clear_selected(self) -> None:
+        """選択した複数のP番号を確認後に未使用値へ変更する。
+
+        Ctrl/Commandによる複数選択を受け付け、確認は一度だけ行う。
+        各番号の書き込みと読み戻しは既存のModelに委譲する。
+        途中で失敗した場合は処理を中止し、成功済みの結果を画面へ反映する。
+        JSONファイルは変更しない。
+        """
+        try:
+            numbers = self._selected_numbers()
+        except ValueError as exc:
+            QMessageBox.warning(self, "番号未選択", str(exc))
+            return
+        targets = ", ".join(f"P{number}" for number in numbers)
+        reply = QMessageBox.warning(
+            self,
+            "P変数の0クリア確認",
+            f"次の{len(numbers)}件を [0, 0, 0, 0, 0, 0, -1] に変更します。\n"
+            f"{targets}\n元の座標は失われます。続行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        completed: list[int] = []
+        try:
+            for number in numbers:
+                self._controller.clear_number(number)
+                completed.append(number)
         except Exception as exc:
-            QMessageBox.critical(self, "ティーチング失敗", str(exc))
-
-    def teach_specific(self) -> None:
-        self._teach(self.number.value())
-
-    def _teach(self, number: int) -> None:
-        try:
-            key = self.service.teach(number)
             self.refresh()
-            self.status.setText(f"保存しました: {key}")
-            QMessageBox.information(self, "登録完了", f"{key} に現在位置を登録しました")
+            done = ", ".join(f"P{number}" for number in completed)
+            QMessageBox.critical(
+                self,
+                "削除失敗",
+                f"P{number}の処理で失敗しました: {exc}\n"
+                f"処理済み: {done if done else 'なし'}\n"
+                "失敗した番号の保存先の状態を確認してください。",
+            )
+            return
+        self.refresh()
+        QMessageBox.information(
+            self, "クリア完了", f"{len(completed)}件を未使用値に変更しました"
+        )
+
+    def _selected_numbers(self) -> list[int]:
+        """選択行のP番号を取得する。複数選択を維持する。"""
+        rows = sorted(
+            index.row() for index in self._table.selectionModel().selectedRows()
+        )
+        if not rows:
+            raise ValueError("一覧からP番号を選択してください")
+        numbers: list[int] = []
+        for row in rows:
+            item = self._table.item(row, 0)
+            if item is None:
+                raise ValueError("選択行のP番号が取得できません")
+            numbers.append(int(item.text()[1:]))
+        return numbers
+
+    def _delete_selected(self) -> None:
+        """選択行を表示一覧から削除する。実機・JSONには書き込まない。"""
+        try:
+            numbers = self._selected_numbers()
+        except ValueError as exc:
+            QMessageBox.warning(self, "番号未選択", str(exc))
+            return
+        targets = ", ".join(f"P{number}" for number in numbers)
+        reply = QMessageBox.question(
+            self,
+            "一覧から削除",
+            f"次の{len(numbers)}件を表示一覧から削除します。\n{targets}\n"
+            + (
+                "実機のP変数とJSONファイルは変更しません。"
+                if self._controller.uses_robot_memory
+                else "JSONファイルからも削除します。"
+            )
+            + "続行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._controller.delete_numbers(numbers)
+        self.refresh()
+
+    def _teach_selected(self) -> None:
+        """一覧で選択したP番号への書き込みを確認する。"""
+        try:
+            number = self._selected_number()
         except Exception as exc:
-            QMessageBox.critical(self, "ティーチング失敗", str(exc))
+            QMessageBox.warning(self, "番号未選択", str(exc))
+            return
+        self._write_number(number)
+
+    def _teach_specified(self) -> None:
+        """番号入力欄のP番号への書き込みを確認する。"""
+        self._write_number(self._number.value())
+
+    def _write_number(self, number: int) -> None:
+        """上書きの危険を明示し、承認された場合だけModelへ書き込みを依頼する。"""
+        if self._controller.model.current_position is None:
+            QMessageBox.warning(
+                self, "現在位置未取得", "先に現在位置を取得してください"
+            )
+            return
+        reply = QMessageBox.warning(
+            self,
+            "P変数の上書き確認",
+            f"P{number}を現在位置で上書きします。\n"
+            "既存の座標は失われます。続行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._controller.teach_number(number)
+            self.refresh()
+            QMessageBox.information(
+                self, "書き込み完了", f"P{number}に現在位置を書き込みました"
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "書き込み失敗", str(exc))
+
+    def _teach_unused(self) -> None:
+        """空き番号の自動判定は未確認のため、実機へは書き込まない。"""
+        try:
+            self._controller.teach_first_unused(
+                self._start_number.value(), self._end_number.value()
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "空き番号の判定不可", str(exc))
+
+    def _save_file(self) -> None:
+        """表示中のP変数をJSONへ保存する。ロボットには書き込まない。"""
+        try:
+            self._controller.save_file()
+            QMessageBox.information(
+                self, "保存完了", f"JSONへ保存しました: {JSON_FILE}"
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "JSON保存失敗", str(exc))
+
+    def execute(self, action: Any) -> None:
+        """読み取り操作を実行し、成功時に画面を更新する。"""
+        try:
+            action()
+            self.refresh()
+        except Exception as exc:
+            QMessageBox.critical(self, "読み取り失敗", str(exc))
 
 
-def run_gui(
-    get_current_pose: Callable[[], Any],
-    robot: Optional[Any] = None,
-    filename: str = JSON_FILENAME,
-) -> int:
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    manager = RobotVarManager(filename=filename, autoload=True, autosave=False)
-    service = TeachingService(manager, get_current_pose, robot)
-    window = TeachingWindow(service)
+def main() -> None:
+    """QtアプリケーションとModelを生成し、GUIを起動する。"""
+    app = QApplication(sys.argv)
+
+    # httpx のログを WARNING レベル以上にする（INFO を抑制）
+    import logging
+
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    ##################################################
+    # 接続先の変更は、以下のimportとDeviceProxyの生成箇所のみで行う。
+    from cobotta2 import Config
+    from cobotta2.server_fastapi import DeviceProxy
+
+    # 実機接続時は次の2行を有効化し、import元と制御クラス名を指定する。
+    logger = XLogger(log_level="info")
+    config = Config("config_cobotta3_server5.yaml")
+
+    device_name = "CobottaCtrl"
+    robot = DeviceProxy(
+        device_name,
+        config=config,
+        logger=logger,
+        async_mode=False,
+    )
+    # robot = None  # 未接続でGUIの読み取り表示を確認する場合
+    ##################################################
+
+    manager = RobotVarManager(
+        robot_instance=robot,
+        autosave=False,
+        autoload=False,
+        logger=logger,
+    )
+    model = TeachingModel(
+        manager,
+        JSON_FILE,
+        logger=logger,
+        async_mode=False,
+    )
+
+    # DeviceProxyに渡したデバイス名で保存先を決定する。
+    controller = TeachingController(
+        model,
+        device_name=device_name,
+        logger=logger,
+    )
+    window = TeachingWindow(controller)
     window.show()
-    return app.exec()
+    exit_code = app.exec()
+    # QThreadなどのQtオブジェクトを先に破棄し、HTTPクライアントを終了する。
+    window.close()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
-    raise SystemExit(
-        "実機の現在P座標取得関数を指定して run_gui(get_current_pose, robot) を呼び出してください"
-    )
+    main()

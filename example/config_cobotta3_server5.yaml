@@ -1,0 +1,13 @@
+# --- joypad-server
+JOYPAD_PORT: 50051
+JOYPAD_LOGGER_NAME: "cobotta4_joypad"
+# --- cobotta3
+COBOTTA_IP: "10.170.10.53"
+COBOTTA_CAMERA_IP: None
+# --- cobotta-server5
+SERVER_IP: "10.170.10.55"
+SERVER_PORT: 8000
+CLIENT_LOGGER_NAME: "cobotta3_server4_client"
+SERVER_LOGGER_NAME: "cobotta3_server4"
+TIMEOUT: 5
+LOGGER_LEVEL: "debug"
