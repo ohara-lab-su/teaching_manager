@@ -6,10 +6,10 @@
 
 責務外:
     Qt画面の構築、DeviceProxyの生成、ロボット固有APIの変換、
-    ロボット内部変数への書き込み（テスト中は無効）。
+    Qt画面の構築とユーザーへの確認ダイアログ。
 
 安全上の制約:
-    読み取りテスト版。ロボットへの書き込みAPIは呼び出さない。
+    実機への書き込みは指定番号の明示操作に限る。
     P変数の値から未使用かどうかを推測しない。
 """
 
@@ -187,10 +187,37 @@ class TeachingModel:
             if temporary_name is not None and os.path.exists(temporary_name):
                 os.unlink(temporary_name)
 
-    def teach_first_unused(self, start: int, end: int) -> None:
-        """空き番号へのティーチング操作（実機書き込みテスト前は実行禁止）。
+    def teach_number(self, number: int) -> Any:
+        """現在位置を指定P番号へ書き込み、実機から読み戻す。
 
-        現時点では未使用P変数の判定条件が確認されていない。
-        ロボットの既存値を破壊しないため、書き込みAPIは呼び出さない。
+        明示的な上書き操作専用。GUI側で番号と上書き確認を行う。
+        読み戻し成功後、画面表示とローカルキャッシュを更新する。
+        JSONへの保存は別ボタンで明示的に行う。
         """
-        raise RuntimeError("実機書き込みテスト前のため、ティーチングは無効です")
+        if self.robot is None:
+            raise RuntimeError("ロボットが接続されていません")
+        if number < 0:
+            raise ValueError("P番号は0以上を指定してください")
+        if self._current_position is None:
+            raise RuntimeError("先に現在位置を取得してください")
+        result = self.robot.set_var("P", number, self._current_position)
+        if inspect.isawaitable(result):
+            raise RuntimeError("書き込みには同期DeviceProxyが必要です")
+        if result is False:
+            raise RuntimeError(f"P{number}への書き込みが失敗しました")
+        readback = self.robot.get_var("P", number)
+        if inspect.isawaitable(readback):
+            raise RuntimeError("読み戻しには同期DeviceProxyが必要です")
+        if readback is False or readback is None:
+            raise RuntimeError(f"P{number}の読み戻しに失敗しました。実機の状態を確認してください")
+        self._manager.set_var(f"P{number}", readback, save=False)
+        self._positions[f"P{number}"] = readback
+        self._source = "ロボット（書き込み後）"
+        return readback
+
+    def teach_first_unused(self, start: int, end: int) -> None:
+        """空き番号への自動登録。未使用判定が未確定の間は書き込まない。"""
+        raise RuntimeError(
+            "未使用P番号の判定条件が未確認です。"
+            "既存値を保護するため自動登録は実行できません"
+        )
