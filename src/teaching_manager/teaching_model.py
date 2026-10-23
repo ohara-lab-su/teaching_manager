@@ -16,6 +16,8 @@
 import asyncio
 import inspect
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -53,7 +55,7 @@ class TeachingModel:
     @property
     def robot(self) -> Any:
         """マネージャーに接続済みのロボットインスタンスを返す。"""
-        return self._manager._robot_instance
+        return self._manager.robot_instance
 
     @property
     def source(self) -> str:
@@ -79,13 +81,28 @@ class TeachingModel:
             if isinstance(key, str) and key.startswith("P") and key[1:].isdigit()
         }
 
-    def load_file(self) -> None:
-        """JSONを読み取って表示状態を更新する。ロボットへは書き込まない。"""
-        if not self._filename.exists():
+    @property
+    def json_filename(self) -> str:
+        """起動時に指定されたデフォルトJSONファイルのパスを返す。"""
+        return str(self._filename)
+
+    def load_file(self, filename: str | None = None) -> None:
+        """JSONを読み取って表示状態を更新する。ロボットへは書き込まない。
+
+        Args:
+            filename: 読み込むJSONファイル。省略時はデフォルトファイル。
+                任意ファイルを選んでも保存先のデフォルト設定は変更しない。
+        """
+        path = self._filename
+        if filename is not None:
+            path = Path(filename)
+        if not path.exists():
+            if filename is not None:
+                raise FileNotFoundError(f"JSONファイルが見つかりません: {path}")
             self._positions = {}
             self._source = "JSON（ファイルなし）"
             return
-        with self._filename.open(encoding="utf-8") as stream:
+        with path.open(encoding="utf-8") as stream:
             data = json.load(stream)
         if not isinstance(data, dict):
             raise ValueError("JSONのルートは辞書である必要があります")
@@ -172,20 +189,20 @@ class TeachingModel:
     def save_file(
         self,
         allow_empty: bool = False,
+        data: Optional[Dict[str, Any]] = None,
     ) -> None:
         """現在画面に表示しているP変数をJSONへ保存する。
 
         ロボットには書き込まない。読み取り結果がない場合は既存ファイルを
         空のデータで上書きしない。保存成功後にだけ表示元を更新する。
         """
-        if not self._positions and not allow_empty:
+        values = self._positions if data is None else data
+        if not values and not allow_empty:
             raise ValueError(
                 "保存対象のP変数がありません。先にロボットから読み込んでください"
             )
         self._filename.parent.mkdir(parents=True, exist_ok=True)
         # JSONへ書く内容は表示中のP変数だけ。マネージャーの他種変数は含めない。
-        import os
-        import tempfile
 
         temporary_name = None
         try:
@@ -198,7 +215,7 @@ class TeachingModel:
                 delete=False,
             ) as stream:
                 temporary_name = stream.name
-                json.dump(self._positions, stream, ensure_ascii=False, indent=2)
+                json.dump(values, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary_name, self._filename)
@@ -222,9 +239,11 @@ class TeachingModel:
             raise RuntimeError("先に現在位置を取得してください")
         if not self._uses_robot_memory:
             key = f"P{number}"
-            self._positions[key] = self._current_position
+            updated = self._positions.copy()
+            updated[key] = self._current_position
+            self.save_file(data=updated)
+            self._positions = updated
             self._manager.set_var(key, self._current_position, save=False)
-            self.save_file()
             self._source = "JSON（現在位置の登録後）"
             return self._current_position
         if self.robot is None:
@@ -252,16 +271,18 @@ class TeachingModel:
     ) -> Any:
         """指定P番号を未使用値に変更し、実機から読み戻して反映する。
 
-        実機のP変数を変更する操作であり、JSONファイルは変更しない。
+        Cobottaでは実機のP変数を変更する。その他はJSONを更新する。
         """
         if number < 0:
             raise ValueError("P番号は0以上を指定してください")
         empty = [0, 0, 0, 0, 0, 0, -1]
         if not self._uses_robot_memory:
             key = f"P{number}"
-            self._positions[key] = empty.copy()
+            updated = self._positions.copy()
+            updated[key] = empty.copy()
+            self.save_file(data=updated)
+            self._positions = updated
             self._manager.set_var(key, empty.copy(), save=False)
-            self.save_file()
             self._source = "JSON（クリア後）"
             return empty
         if self.robot is None:
@@ -289,18 +310,20 @@ class TeachingModel:
     ) -> None:
         """選択P番号を表示一覧とローカルキャッシュから削除する。
 
-        ロボット内部のP変数とJSONファイルには一切書き込まない。
-        JSONへの削除反映は別途「JSONに保存」を実行した場合のみ行う。
+        Cobottaでは実機とJSONを変更しない。その他はJSONからも削除する。
         """
+        updated = self._positions.copy()
         for number in numbers:
-            key = f"P{number}"
-            self._positions.pop(key, None)
-            self._manager._vars.pop(key, None)
+            updated.pop(f"P{number}", None)
         if not self._uses_robot_memory:
-            self.save_file(allow_empty=True)
-            self._source = "JSON（削除後）"
-        else:
+            self.save_file(allow_empty=True, data=updated)
+        self._positions = updated
+        for number in numbers:
+            self._manager.delete_var("P", number)
+        if self._uses_robot_memory:
             self._source = "一覧（ローカル削除後）"
+        else:
+            self._source = "JSON（削除後）"
 
     def teach_first_unused(
         self,

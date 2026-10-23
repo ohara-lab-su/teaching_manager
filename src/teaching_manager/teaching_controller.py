@@ -5,8 +5,6 @@
 責務外: Qtウィジェット、確認ダイアログ、ロボット固有APIの実装。
 """
 
-import asyncio
-import inspect
 from typing import Any
 
 from .teaching_model import TeachingModel
@@ -33,6 +31,11 @@ class TeachingController:
         self._uses_robot_memory = device_name == "CobottaCtrl"
         self._model.set_storage_mode(self._uses_robot_memory)
         self._logger = logger
+
+    @property
+    def device_name(self) -> str:
+        """DeviceProxy生成時のデバイス名を返す。"""
+        return self._device_name
 
     @property
     def uses_robot_memory(self) -> bool:
@@ -67,9 +70,14 @@ class TeachingController:
             )
         self._model.read_robot(start, end)
 
-    def load_file(self) -> None:
-        """JSONを読み込む。"""
-        self._model.load_file()
+    @property
+    def json_filename(self) -> str:
+        """ファイル選択ダイアログの初期パスとなるJSONファイル名を返す。"""
+        return self._model.json_filename
+
+    def load_file(self, filename: str | None = None) -> None:
+        """指定したJSONを読み込む。省略時はデフォルトファイルを使う。"""
+        self._model.load_file(filename)
 
     def save_file(self) -> None:
         """表示中の一覧をJSONへ保存する。"""
