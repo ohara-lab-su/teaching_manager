@@ -22,16 +22,28 @@ class RobotVarManager:
         self._filename = filename
         self._autosave = bool(autosave)
 
-        if autoload and filename is not None:
-            try:
-                self.load(filename)
-            except FileNotFoundError:
-                pass
+        if autoload:
+            if filename is not None:
+                try:
+                    self.load(filename)
+                except FileNotFoundError:
+                    pass
+
+    @property
+    def robot_instance(self) -> Any:
+        """接続済みロボットを返す。接続がない場合はNone。"""
+        return self._robot_instance
+
+    def delete_var(self, kind: str, num: int) -> None:
+        """ローカルキャッシュの指定変数のみ削除する。実機には影響しない。"""
+        self._vars.pop(self._make_key(kind, num), None)
+        self._autosave_if_enabled()
 
     def _autosave_if_enabled(self):
         """autosave=True のときだけ現在のローカル変数を保存する。"""
-        if self._autosave and self._filename is not None:
-            self.save(self._filename)
+        if self._autosave:
+            if self._filename is not None:
+                self.save(self._filename)
 
     @staticmethod
     def _make_key(kind_or_combined: str, num: Optional[Union[str, int]] = None) -> str:
@@ -97,7 +109,9 @@ class RobotVarManager:
             values = [value]
         else:
             keys = [f"{kind}{i}" for i in range(start, end + 1)]
-            if not isinstance(value, (list, tuple)) or len(value) != len(keys):
+            if not isinstance(value, (list, tuple)):
+                raise ValueError("値リスト長と変数数が一致しません")
+            if len(value) != len(keys):
                 raise ValueError("値リスト長と変数数が一致しません")
             values = value
 
@@ -262,15 +276,13 @@ class RobotVarManager:
         if self._robot_instance is None:
             raise RuntimeError("No robot_instance attached")
 
-        try:
-            for key, value in self._vars.items():
-                setattr(self._robot_instance, key, value)
-        except Exception as e:
-            pass
+        for key, value in self._vars.items():
+            setattr(self._robot_instance, key, value)
 
     # JSON保存・ロード
     def save(self, filename=None):
-        filename = filename or self._filename
+        if filename is None:
+            filename = self._filename
         if filename is None:
             raise ValueError("filename is not specified")
         with open(filename, "w", encoding="utf-8") as f:
@@ -278,7 +290,8 @@ class RobotVarManager:
         self._filename = filename
 
     def load(self, filename=None):
-        filename = filename or self._filename
+        if filename is None:
+            filename = self._filename
         if filename is None:
             raise ValueError("filename is not specified")
         with open(filename, "r", encoding="utf-8") as f:
@@ -291,7 +304,9 @@ class RobotVarManager:
 
     def __repr__(self):
         cls = self.__class__.__name__
-        robot_state = "attached" if self._robot_instance is not None else "none"
+        robot_state = "none"
+        if self._robot_instance is not None:
+            robot_state = "attached"
         n = len(self._vars)
         # 先頭3件だけプレビュー
         preview_keys = list(self._vars.keys())[:3]

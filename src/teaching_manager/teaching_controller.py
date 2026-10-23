@@ -5,8 +5,6 @@
 責務外: Qtウィジェット、確認ダイアログ、ロボット固有APIの実装。
 """
 
-import asyncio
-import inspect
 from typing import Any
 
 from .teaching_model import TeachingModel
@@ -33,6 +31,11 @@ class TeachingController:
         self._uses_robot_memory = device_name == "CobottaCtrl"
         self._model.set_storage_mode(self._uses_robot_memory)
         self._logger = logger
+
+    @property
+    def device_name(self) -> str:
+        """DeviceProxy生成時のデバイス名を返す。"""
+        return self._device_name
 
     @property
     def uses_robot_memory(self) -> bool:
@@ -67,13 +70,18 @@ class TeachingController:
             )
         self._model.read_robot(start, end)
 
-    def load_file(self) -> None:
-        """JSONを読み込む。"""
-        self._model.load_file()
+    @property
+    def json_filename(self) -> str:
+        """ファイル選択ダイアログの初期パスとなるJSONファイル名を返す。"""
+        return self._model.json_filename
 
-    def save_file(self) -> None:
-        """表示中の一覧をJSONへ保存する。"""
-        self._model.save_file()
+    def load_file(self, filename: str | None = None) -> None:
+        """指定したJSONを読み込む。省略時はデフォルトファイルを使う。"""
+        self._model.load_file(filename)
+
+    def save_file(self, filename: str | None = None) -> None:
+        """指定したJSONへ一覧を保存する。省略時は既定の保存先を使う。"""
+        self._model.save_file(filename=filename)
 
     def read_current_position(self) -> Any:
         """現在位置を取得する。同期/非同期モードはModel設定に従う。"""
@@ -118,3 +126,17 @@ class TeachingController:
     ) -> None:
         """一覧から削除する。JSON管理ではファイルにも反映する。"""
         self._model.delete_numbers(numbers)
+
+    @property
+    def has_unsaved_changes(self) -> bool:
+        """JSON未保存の変更があるかを返す。"""
+        return self._model.has_unsaved_changes
+
+    @property
+    def has_robot_changes(self) -> bool:
+        """Cobotta内部値との不一致があるかを返す。"""
+        return self._model.has_robot_changes
+
+    def save_on_close(self) -> None:
+        """終了時の実機同期とデフォルトJSON保存を実行する。"""
+        self._model.save_on_close()
