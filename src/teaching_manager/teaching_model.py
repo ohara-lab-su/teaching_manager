@@ -40,6 +40,15 @@ class TeachingModel:
         self._source = "未読込"
         self._positions: Dict[str, Any] = {}
         self._current_position: Any = None
+        self._uses_robot_memory = True
+
+    def set_storage_mode(self, uses_robot_memory: bool) -> None:
+        """P変数の保存先を設定する。Controllerがデバイス名から決定する。
+
+        Args:
+            uses_robot_memory: Trueなら実機P変数、FalseならJSONファイル。
+        """
+        self._uses_robot_memory = uses_robot_memory
 
     @property
     def robot(self) -> Any:
@@ -160,23 +169,33 @@ class TeachingModel:
         """
         return None
 
-    def save_file(self) -> None:
+    def save_file(
+        self,
+        allow_empty: bool = False,
+    ) -> None:
         """現在画面に表示しているP変数をJSONへ保存する。
 
         ロボットには書き込まない。読み取り結果がない場合は既存ファイルを
         空のデータで上書きしない。保存成功後にだけ表示元を更新する。
         """
-        if not self._positions:
-            raise ValueError("保存対象のP変数がありません。先にロボットから読み込んでください")
+        if not self._positions and not allow_empty:
+            raise ValueError(
+                "保存対象のP変数がありません。先にロボットから読み込んでください"
+            )
         self._filename.parent.mkdir(parents=True, exist_ok=True)
         # JSONへ書く内容は表示中のP変数だけ。マネージャーの他種変数は含めない。
         import os
         import tempfile
+
         temporary_name = None
         try:
             with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8", dir=self._filename.parent,
-                prefix=f".{self._filename.name}.", suffix=".tmp", delete=False,
+                mode="w",
+                encoding="utf-8",
+                dir=self._filename.parent,
+                prefix=f".{self._filename.name}.",
+                suffix=".tmp",
+                delete=False,
             ) as stream:
                 temporary_name = stream.name
                 json.dump(self._positions, stream, ensure_ascii=False, indent=2)
@@ -187,19 +206,29 @@ class TeachingModel:
             if temporary_name is not None and os.path.exists(temporary_name):
                 os.unlink(temporary_name)
 
-    def teach_number(self, number: int) -> Any:
+    def teach_number(
+        self,
+        number: int,
+    ) -> Any:
         """現在位置を指定P番号へ書き込み、実機から読み戻す。
 
         明示的な上書き操作専用。GUI側で番号と上書き確認を行う。
         読み戻し成功後、画面表示とローカルキャッシュを更新する。
         JSONへの保存は別ボタンで明示的に行う。
         """
-        if self.robot is None:
-            raise RuntimeError("ロボットが接続されていません")
         if number < 0:
             raise ValueError("P番号は0以上を指定してください")
         if self._current_position is None:
             raise RuntimeError("先に現在位置を取得してください")
+        if not self._uses_robot_memory:
+            key = f"P{number}"
+            self._positions[key] = self._current_position
+            self._manager.set_var(key, self._current_position, save=False)
+            self.save_file()
+            self._source = "JSON（現在位置の登録後）"
+            return self._current_position
+        if self.robot is None:
+            raise RuntimeError("ロボットが接続されていません")
         result = self.robot.set_var("P", number, self._current_position)
         if inspect.isawaitable(result):
             raise RuntimeError("書き込みには同期DeviceProxyが必要です")
@@ -209,13 +238,75 @@ class TeachingModel:
         if inspect.isawaitable(readback):
             raise RuntimeError("読み戻しには同期DeviceProxyが必要です")
         if readback is False or readback is None:
-            raise RuntimeError(f"P{number}の読み戻しに失敗しました。実機の状態を確認してください")
+            raise RuntimeError(
+                f"P{number}の読み戻しに失敗しました。実機の状態を確認してください"
+            )
         self._manager.set_var(f"P{number}", readback, save=False)
         self._positions[f"P{number}"] = readback
         self._source = "ロボット（書き込み後）"
         return readback
 
-    def teach_first_unused(self, start: int, end: int) -> None:
+    def clear_number(
+        self,
+        number: int,
+    ) -> Any:
+        """指定P番号を未使用値に変更し、実機から読み戻して反映する。
+
+        実機のP変数を変更する操作であり、JSONファイルは変更しない。
+        """
+        if number < 0:
+            raise ValueError("P番号は0以上を指定してください")
+        empty = [0, 0, 0, 0, 0, 0, -1]
+        if not self._uses_robot_memory:
+            key = f"P{number}"
+            self._positions[key] = empty.copy()
+            self._manager.set_var(key, empty.copy(), save=False)
+            self.save_file()
+            self._source = "JSON（クリア後）"
+            return empty
+        if self.robot is None:
+            raise RuntimeError("ロボットが接続されていません")
+        result = self.robot.set_var("P", number, empty)
+        if inspect.isawaitable(result):
+            raise RuntimeError("書き込みには同期DeviceProxyが必要です")
+        if result is False:
+            raise RuntimeError(f"P{number}のクリアに失敗しました")
+        readback = self.robot.get_var("P", number)
+        if inspect.isawaitable(readback):
+            raise RuntimeError("読み戻しには同期DeviceProxyが必要です")
+        if readback is False or readback is None:
+            raise RuntimeError(f"P{number}の読み戻しに失敗しました")
+        if list(readback) != empty:
+            raise RuntimeError(f"P{number}のクリア値が一致しません: {readback!r}")
+        self._manager.set_var(f"P{number}", readback, save=False)
+        self._positions[f"P{number}"] = readback
+        self._source = "ロボット（クリア後）"
+        return readback
+
+    def delete_numbers(
+        self,
+        numbers: list[int],
+    ) -> None:
+        """選択P番号を表示一覧とローカルキャッシュから削除する。
+
+        ロボット内部のP変数とJSONファイルには一切書き込まない。
+        JSONへの削除反映は別途「JSONに保存」を実行した場合のみ行う。
+        """
+        for number in numbers:
+            key = f"P{number}"
+            self._positions.pop(key, None)
+            self._manager._vars.pop(key, None)
+        if not self._uses_robot_memory:
+            self.save_file(allow_empty=True)
+            self._source = "JSON（削除後）"
+        else:
+            self._source = "一覧（ローカル削除後）"
+
+    def teach_first_unused(
+        self,
+        start: int,
+        end: int,
+    ) -> None:
         """空き番号への自動登録。未使用判定が未確定の間は書き込まない。"""
         raise RuntimeError(
             "未使用P番号の判定条件が未確認です。"
