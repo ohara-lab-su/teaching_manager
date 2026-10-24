@@ -1,18 +1,18 @@
-# Teaching Manager — v0.1.0
+# Teaching Manager — English
 
 [![en](https://img.shields.io/badge/lang-en-red.svg)](en/index.md)
 [![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](ja/index.md)
 
-Robot position teaching and P-variable management. / ロボット位置のティーチングとP変数管理。
-
-**[日本語ドキュメント](jp/index.md) | [English documentation](en/index.md)**
+This guide covers both the Qt teaching interface and direct Python API usage.
 
 ```{toctree}
 :maxdepth: 2
-:caption: Languages / 言語
+:caption: Contents
 
-jp/index
-en/index
+overview
+quickstart
+gui
+python_api
+storage
+api
 ```
-
-Source repository: [ohara-lab-su/teaching_manager](https://github.com/ohara-lab-su/teaching_manager)
