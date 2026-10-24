@@ -1,6 +1,7 @@
 # Teaching Manager — English
 
-[日本語](../jp/index.md) | [Language selection](../index.md)
+[![en](https://img.shields.io/badge/lang-en-red.svg)](index.md)
+[![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](../ja/index.md)
 
 This guide covers both the Qt teaching interface and direct Python API usage.
 

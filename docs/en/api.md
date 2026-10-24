@@ -1,8 +1,6 @@
 # Python API reference (generated from docstrings)
 
-[日本語](../jp/api.md)
-
-このページのメソッド・プロパティ一覧はSphinx autodocが実コードから生成します。 / Sphinx autodoc generates the method and property lists from the source code.
+Sphinx autodoc generates the method and property lists from the source code.
 
 ## RobotVarManager
 

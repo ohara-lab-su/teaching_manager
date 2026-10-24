@@ -1,27 +1,27 @@
-# 変更履歴
+# Changelog
 
 [English](CHANGELOG.en.md) | [日本語](CHANGELOG.md)
 
 ## [0.1.0] - 2026-10-23
 
-### 変更・追加
+### Added and changed
 
-- GUI実装を `src/teaching_manager/teaching_gui.py` に移し、`example/teaching_gui.py` を起動専用に整理。
-- GUI／Controller／Model／RobotVarManagerのMVC責務を整理。
-- `CobottaCtrl` とその他のデバイス名で実機P変数／JSON保存先を自動選択。
-- 現在位置の取得、指定番号と選択行へのティーチング、読み戻し。
-- 右クリックからの書き込み、0クリア、一覧削除。Ctrl/Command・Shiftによる複数選択。
-- JSON読込・保存ダイアログに既定のフォルダとファイル名を設定。任意ファイルの選択に対応。
-- 終了時の未保存変更確認、Cobotta内部値の同期、JSON保存。
-- 通信処理のワーカー化、条件分岐の簡素化、保存時の状態管理を改善。
-- 日本語／英語のREADME、CHANGELOG、Sphinxチュートリアル、API自動生成、GitHub Pagesワークフローを整備。
+- Moved the GUI implementation to `src/teaching_manager/teaching_gui.py`; retained `example/teaching_gui.py` as a launcher.
+- Refined the MVC responsibilities of GUI, Controller, Model, and RobotVarManager.
+- Automatically selected robot P-variable storage for `CobottaCtrl`, and JSON storage for other devices.
+- Added current-position retrieval, teaching to a specified/selected P number, and readback.
+- Added context-menu teaching, clearing, row removal, and Ctrl/Command/Shift multi-selection.
+- Added JSON open/save dialogs with a configurable default directory and filename.
+- Added exit-time change confirmation, Cobotta synchronization, and JSON saving.
+- Improved worker-based communications, simplified conditionals, and refined save-state handling.
+- Added bilingual README/CHANGELOG, Sphinx tutorials, generated API references, and a GitHub Pages workflow.
 
-### 既知の制限
+### Known limitations
 
-- 空き番号への自動ティーチングは未実装。
-- 通信タイムアウトはDeviceProxy側の仕様確認が必要。
-- GUIと実機での動作確認は未実施。
+- Automatic teaching to the first unused P number is not implemented.
+- DeviceProxy communication timeout behavior requires separate verification.
+- GUI and hardware integration have not been tested here.
 
 ## [0.0.0] - 2026-10-23
 
-初期版。P変数一覧、現在位置の取得、ティーチング、JSON入出力、基本的なMVC構成を導入。
+Initial version with P-variable listing, current-position retrieval, teaching, JSON import/export, and basic MVC separation.

@@ -1,5 +1,8 @@
 # Teaching Manager — v0.1.0
 
+[![en](https://img.shields.io/badge/lang-en-red.svg)](en/index.md)
+[![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](ja/index.md)
+
 Robot position teaching and P-variable management. / ロボット位置のティーチングとP変数管理。
 
 **[日本語ドキュメント](jp/index.md) | [English documentation](en/index.md)**

@@ -1,31 +1,39 @@
 # Teaching Manager
 
-[![en](https://img.shields.io/badge/lang-en-red.svg)](README.en.md) [![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](README.md)
+[![en](https://img.shields.io/badge/lang-en-red.svg)](README.md)
+[![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](README.ja.md)
 
-**Version 0.1.0** — ロボット位置のティーチングとP変数のJSON管理を行うPythonパッケージ／PySide6 GUI。
+**Version 0.1.0** — A Python package and PySide6 GUI for robot position teaching and P-variable management.
 
-## 機能
+## Features
 
-Cobotta (`device_name == "CobottaCtrl"`) は実機P変数、それ以外のロボットはJSONファイルを保存先に使用します。現在位置の取得、指定P番号への書き込み、一覧の右クリック操作、複数行の0クリアと削除、任意JSONの読み込み・保存、終了時の保存確認に対応します。
+Cobotta (`device_name == "CobottaCtrl"`) stores P variables on the robot; other devices use JSON files. The application
+supports current-position retrieval, teaching to a specified P number, context-menu operations, multi-row clear/removal,
+JSON open/save dialogs, and save confirmation on exit.
 
-GUI本体は `src/teaching_manager/teaching_gui.py`、起動例は `example/teaching_gui.py` にあります。Controller、Model、RobotVarManagerを分離したMVC構成です。
+The GUI implementation resides in `src/teaching_manager/teaching_gui.py`; `example/teaching_gui.py` is the launcher.
+Controller, Model, and RobotVarManager follow a simple MVC design.
 
-## 起動
+## Launch
 
-実機用の `cobotta2`、`x_logger`、GUI用の `PySide6` と接続設定を用意し、起動用スクリプトの `device_name`、`Config(...)`、`JSON_FILE` を設定してください。
+Provide `PySide6`, `cobotta2`, `x_logger`, and the appropriate connection configuration. Configure `device_name`,
+`Config(...)`, and `JSON_FILE` in the launcher.
 
 ```bash
 python example/teaching_gui.py
 ```
 
-## ドキュメント
+## Documentation
 
+- [English tutorials and API](docs/en/index.md)
 - [日本語チュートリアル・API](docs/jp/index.md)
-- [English tutorial and API](docs/en/index.md)
-- [言語選択トップ](docs/index.md)
+- [Language selection](docs/index.md)
 
-PagesはSphinxで生成し、`RobotVarManager`、`TeachingModel`、`TeachingController`、GUIのAPIをdocstringから自動抽出します。`bash docs/build.sh` でビルドできます。
+Sphinx generates the API reference from docstrings for `RobotVarManager`, `TeachingModel`, `TeachingController`, and the
+GUI. Build with `bash docs/build.sh`.
 
-**注意:** 0クリアは `[0, 0, 0, 0, 0, 0, -1]` を書き込みます。Cobottaの「一覧削除」は実機値を削除しません。空き番号への自動ティーチングは未実装です。実機書き込みは終了時の「保存しない」では元に戻りません。
+**Important:** Clear writes `[0, 0, 0, 0, 0, 0, -1]`. Removing a Cobotta row does not delete the robot's internal
+variable. Automatic teaching to an unused P number is not implemented. Discarding on exit does not undo robot writes
+already performed.
 
-[変更履歴](CHANGELOG.md)
+[Changelog](CHANGELOG.en.md)
