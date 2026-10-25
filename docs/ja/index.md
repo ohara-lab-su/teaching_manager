@@ -3,7 +3,9 @@
 [![en](https://img.shields.io/badge/lang-en-red.svg)](https://ohara-lab-su.github.io/teaching_manager/)
 [![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](https://ohara-lab-su.github.io/teaching_manager/ja/)
 
-[GitHub repository](https://github.com/ohara-lab-su/teaching_manager/) · [Project documentation](https://ohara-lab-su.github.io/)
+[![GitHub](https://img.shields.io/badge/GitHub-ohara--lab--su%2Fteaching_manager-181717?logo=github)](https://github.com/ohara-lab-su/teaching_manager/)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/ja/)
+[![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/)
 
 Teaching Manager は、ロボットの座標をティーチングし、番号付きの位置変数（P変数）として管理するためのGUIソフトウェアです。主な目的は、
 **ロボットコントローラ内部の変数メモリに依存せず、ロボットの座標を外部で管理すること**
