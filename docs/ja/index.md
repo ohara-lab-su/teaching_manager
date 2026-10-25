@@ -3,9 +3,14 @@
 [![en](https://img.shields.io/badge/lang-en-red.svg)](https://ohara-lab-su.github.io/teaching_manager/)
 [![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](https://ohara-lab-su.github.io/teaching_manager/ja/)
 
-Teaching Manager は、ロボットの座標をティーチングし、番号付きの位置変数（P変数）として管理するためのGUIソフトウェアです。主な目的は、**ロボットコントローラ内部の変数メモリに依存せず、ロボットの座標を外部で管理すること**です。座標データをローカルで保持し、JSONファイルに保存することで、ロボット内部のP変数領域とは独立して運用できます。
+[GitHub repository](https://github.com/ohara-lab-su/teaching_manager/) · [Project documentation](https://ohara-lab-su.github.io/)
 
-接続したロボットから現在位置を取得し、指定したP番号に対応付けて座標一覧を管理します。`RobotVarManager` により、Pythonからの変数キャッシュ操作、JSONの読み書き、ロボットとの明示的な変数転送にも対応しています。
+Teaching Manager は、ロボットの座標をティーチングし、番号付きの位置変数（P変数）として管理するためのGUIソフトウェアです。主な目的は、
+**ロボットコントローラ内部の変数メモリに依存せず、ロボットの座標を外部で管理すること**
+です。座標データをローカルで保持し、JSONファイルに保存することで、ロボット内部のP変数領域とは独立して運用できます。
+
+接続したロボットから現在位置を取得し、指定したP番号に対応付けて座標一覧を管理します。`RobotVarManager`
+により、Pythonからの変数キャッシュ操作、JSONの読み書き、ロボットとの明示的な変数転送にも対応しています。
 
 ## 座標の保存方式
 
