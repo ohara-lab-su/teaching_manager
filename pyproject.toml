@@ -7,7 +7,7 @@ name = "teaching-manager"
 
 version = "0.1.2"
 
-description = "teaching manager"
+description = "Robot position teaching GUI and Python tools for managing numbered position variables using JSON storage or robot controller variables."
 authors = [
     { name = "Kengo NAKADA", email = "kengo.nakada@email.com" }
 ]
@@ -70,3 +70,8 @@ line-length = 88
 
 [tool.isort]
 profile = "black"
+[project.urls]
+Homepage = "https://ohara-lab-su.github.io/teaching_manager/"
+Documentation = "https://ohara-lab-su.github.io/teaching_manager/"
+Repository = "https://github.com/ohara-lab-su/teaching_manager"
+Issues = "https://github.com/ohara-lab-su/teaching_manager/issues"
