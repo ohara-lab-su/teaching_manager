@@ -7,6 +7,7 @@ Qtによる表示とボタン操作を担当する。データ取得と保持は
 import asyncio
 import inspect
 import json
+import sys
 from typing import Any
 
 from PySide6.QtCore import QThread, Signal, QTimer, Qt
@@ -28,10 +29,52 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 
+from .robot_var_manager import RobotVarManager
 from .teaching_controller import TeachingController
+from .teaching_model import TeachingModel
 
 FIRST_P = 0
 LAST_P = 999
+
+
+def run_teaching_gui(
+    robot: Any,
+    device_name: str,
+    json_file: str,
+    logger: Any = None,
+) -> int:
+    """接続オブジェクトを受け取り、教示画面を起動する。
+
+    Args:
+        robot: 現在位置を取得できる接続オブジェクト。未接続時は None。
+        device_name: Controller が保存方式の判定に使うデバイス名。
+        json_file: 教示点を読み書きする既定の JSON ファイル。
+        logger: GUI の構成要素に渡すロガー。
+
+    Returns:
+        Qt アプリケーションの終了コード。
+    """
+    app = QApplication(sys.argv)
+    manager = RobotVarManager(
+        robot_instance=robot,
+        autosave=False,
+        autoload=False,
+        logger=logger,
+    )
+    model = TeachingModel(
+        manager,
+        json_file,
+        logger=logger,
+        async_mode=False,
+    )
+    controller = TeachingController(
+        model,
+        device_name=device_name,
+        logger=logger,
+    )
+    window = TeachingWindow(controller, json_file)
+    window.show()
+    return app.exec()
 
 
 class _OperationWorker(QThread):
