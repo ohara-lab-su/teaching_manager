@@ -47,8 +47,12 @@ does not itself write to robot memory or JSON.
 
 ```{toctree}
 :maxdepth: 2
-:caption: Documentation
+:caption: Contents
 
-English <en/index>
-日本語 <ja/index>
+Overview and architecture <en/overview>
+Installation and launch <en/quickstart>
+GUI tutorial <en/gui>
+Python API usage <en/python_api>
+JSON management and robot synchronization <en/storage>
+Python API reference <en/api>
 ```
