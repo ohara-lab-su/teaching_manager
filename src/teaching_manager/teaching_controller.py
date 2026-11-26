@@ -28,7 +28,12 @@ class TeachingController:
         """
         self._model = model
         self._device_name = device_name
-        self._uses_robot_memory = device_name == "CobottaCtrl"
+
+        if device_name == "CobottaCtrl":
+            self._uses_robot_memory = True
+        else:
+            self._uses_robot_memory = False
+
         self._model.set_storage_mode(self._uses_robot_memory)
         self._logger = logger
 
