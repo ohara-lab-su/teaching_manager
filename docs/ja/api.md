@@ -25,9 +25,9 @@ property lists from the source code.
 :show-inheritance:
 ```
 
-## TeachingWindow (GUI API)
+## GUI の起動と画面
 
 ```{automodule} teaching_manager.teaching_gui
-:members: TeachingWindow
+:members: run_teaching_gui, TeachingWindow
 :show-inheritance:
 ```

@@ -1,6 +1,18 @@
 # Changelog
 
-[English](CHANGELOG.en.md) | [日本語](CHANGELOG.md)
+[![en](https://img.shields.io/badge/lang-en-red.svg)](CHANGELOG.md)
+[![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](CHANGELOG.ja.md)
+
+[![GitHub](https://img.shields.io/badge/GitHub-ohara--lab--su%2Fteaching_manager-181717?logo=github)](https://github.com/ohara-lab-su/teaching_manager/)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/en/)
+[![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/index.en.html)
+
+## [0.1.3]
+
+- Split the Cobotta and UR launch examples and added `example/ur_server.yaml` for UR connections.
+- Moved shared GUI startup to `run_teaching_gui()`, which initializes `QApplication` before creating the window.
+- Updated the English and Japanese README and Pages launch instructions and added the shared launcher to the API reference.
+- Fixed the Pages home navigation to both the English and Japanese documentation.
 
 ## [0.1.0] - 2026-10-23
 

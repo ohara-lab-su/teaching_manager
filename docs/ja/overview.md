@@ -1,6 +1,6 @@
 # 概要・構成
 
-v0.1.0 は、現在位置の取得、P番号へのティーチング、JSONの読み書き、一覧の0クリアと削除、終了時の保存確認を備えます。
+v0.1.3 は、現在位置の取得、P番号へのティーチング、JSONの読み書き、一覧の0クリアと削除、終了時の保存確認を備えます。
 
 MVCの役割は以下のとおりです。
 
@@ -8,7 +8,8 @@ MVCの役割は以下のとおりです。
 - `teaching_controller.py`：デバイス名に基づくP変数保存先の選択、操作の調整。
 - `teaching_model.py`：位置データ、DeviceProxy API、JSON、同期処理。
 - `robot_var_manager.py`：ローカル変数の保持と汎用的な入出力API。
-- `example/teaching_gui.py`：実機接続設定とGUI起動。
+- `example/teaching_cobotta_gui.py`、`example/teaching_ur_gui.py`：機種別の接続設定とプロキシ生成。
+- `run_teaching_gui()`：生成済みの接続オブジェクトを受け取り、共通の Qt GUI を起動。
 
 ## 注意
 

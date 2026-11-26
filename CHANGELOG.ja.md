@@ -3,6 +3,17 @@
 [![en](https://img.shields.io/badge/lang-en-red.svg)](CHANGELOG.md)
 [![ja](https://img.shields.io/badge/lang-ja-yellow.svg)](CHANGELOG.ja.md)
 
+[![GitHub](https://img.shields.io/badge/GitHub-ohara--lab--su%2Fteaching_manager-181717?logo=github)](https://github.com/ohara-lab-su/teaching_manager/)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/ja/)
+[![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/)
+
+## [0.1.3]
+
+- Cobotta と UR の起動例を分け、UR 用の接続設定 `example/ur_server.yaml` を追加。
+- `run_teaching_gui()` に共通の GUI 起動処理をまとめ、画面の生成前に `QApplication` を初期化。
+- 日英の README と Pages を現在の起動方法に更新し、共通起動関数を API リファレンスに追加。
+- Pages のトップから英語版と日本語版の目次へ移動できるように修正。
+
 ## [0.1.0] - 2026-10-23
 
 ### 変更・追加

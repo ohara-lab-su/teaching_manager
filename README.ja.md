@@ -7,30 +7,33 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/ja/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/)
 
-**Version 0.1.0** — ロボット位置のティーチングとP変数のJSON管理を行うPythonパッケージ／PySide6 GUI。
+**Version 0.1.3** — ロボット位置のティーチングとP変数のJSON管理を行うPythonパッケージ／PySide6 GUI。
 
 ## 機能
 
-Cobotta (`device_name == "CobottaCtrl"`)
-は実機P変数、それ以外のロボットはJSONファイルを保存先に使用します。現在位置の取得、指定P番号への書き込み、一覧の右クリック操作、複数行の0クリアと削除、任意JSONの読み込み・保存、終了時の保存確認に対応します。
+Cobotta の教示先は実機の P 変数で、一覧は JSON にも保存できます。UR など他の装置の教示先は JSON ファイルです。
+現在位置の取得、指定 P 番号への書き込み、複数行の0クリアと削除、JSON の読み込み・保存、終了時の保存確認に対応します。
 
-GUI本体は `src/teaching_manager/teaching_gui.py`、起動例は `example/teaching_gui.py`
-にあります。Controller、Model、RobotVarManagerを分離したMVC構成です。
+機種別の起動例が接続を組み立て、パッケージの `run_teaching_gui()` が共通の GUI を起動します。
 
 ## 起動
 
-実機用の `cobotta2`、`x_logger`、GUI用の `PySide6` と接続設定を用意し、起動用スクリプトの `device_name`、`Config(...)`、
-`JSON_FILE` を設定してください。
+`PySide6` と `x_logger`、使用する装置のパッケージ（`cobotta2` または `ur`）、対応する装置サーバーを用意してください。
+リポジトリ直下から使用する装置の起動例を実行します。
 
 ```bash
-python example/teaching_gui.py
+python example/teaching_cobotta_gui.py
+python example/teaching_ur_gui.py
 ```
+
+Cobotta の起動例は既定で `config_cobotta3_server5.yaml` を読みます。UR は `ur_server.yaml` を読み、
+`UrCtrl` を DeviceProxy に登録する版の `ur` が必要です。接続先と `JSON_FILE` の詳細は [導入・起動](docs/ja/quickstart.md) を参照してください。
 
 ## ドキュメント
 
-- [日本語チュートリアル・API](docs/jp/index.md)
+- [日本語チュートリアル・API](docs/ja/index.md)
 - [English tutorial and API](docs/en/index.md)
-- [言語選択トップ](docs/index.md)
+- [ドキュメントトップ](docs/index.md)
 
 PagesはSphinxで生成し、`RobotVarManager`、`TeachingModel`、`TeachingController`、GUIのAPIをdocstringから自動抽出します。
 `bash docs/build.sh` でビルドできます。
@@ -38,4 +41,4 @@ PagesはSphinxで生成し、`RobotVarManager`、`TeachingModel`、`TeachingCont
 **注意:** 0クリアは `[0, 0, 0, 0, 0, 0, -1]`
 を書き込みます。Cobottaの「一覧削除」は実機値を削除しません。空き番号への自動ティーチングは未実装です。実機書き込みは終了時の「保存しない」では元に戻りません。
 
-[変更履歴](CHANGELOG.md)
+[変更履歴](CHANGELOG.ja.md)
