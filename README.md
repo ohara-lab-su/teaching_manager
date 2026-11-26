@@ -7,31 +7,35 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/en/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/index.en.html)
 
-**Version 0.1.0** — A Python package and PySide6 GUI for robot position teaching and P-variable management.
+**Version 0.1.3** — A Python package and PySide6 GUI for robot position teaching and P-variable management.
 
 ## Features
 
-Cobotta (`device_name == "CobottaCtrl"`) stores P variables on the robot; other devices use JSON files. The application
-supports current-position retrieval, teaching to a specified P number, context-menu operations, multi-row clear/removal,
-JSON open/save dialogs, and save confirmation on exit.
+Cobotta teaching updates the robot's P variables and can also save the table as JSON. UR and other devices store
+taught positions in JSON. The application supports current-position retrieval, teaching to a specified P number,
+clearing and removing multiple rows, JSON loading and saving, and save confirmation on exit.
 
-The GUI implementation resides in `src/teaching_manager/teaching_gui.py`; `example/teaching_gui.py` is the launcher.
-Controller, Model, and RobotVarManager follow a simple MVC design.
+Each device-specific example creates its connection. The package's `run_teaching_gui()` starts the shared GUI.
 
 ## Launch
 
-Provide `PySide6`, `cobotta2`, `x_logger`, and the appropriate connection configuration. Configure `device_name`,
-`Config(...)`, and `JSON_FILE` in the launcher.
+Prepare `PySide6`, `x_logger`, the device package (`cobotta2` or `ur`), and the corresponding device server.
+Run the launcher for your device from the repository root.
 
 ```bash
-python example/teaching_gui.py
+python example/teaching_cobotta_gui.py
+python example/teaching_ur_gui.py
 ```
+
+The Cobotta example reads `config_cobotta3_server5.yaml` by default. The UR example reads `ur_server.yaml` and requires
+a version of `ur` that registers `UrCtrl` with DeviceProxy. See [Installation and launch](docs/en/quickstart.md) for
+connection settings and `JSON_FILE`.
 
 ## Documentation
 
 - [English tutorials and API](docs/en/index.md)
-- [日本語チュートリアル・API](docs/jp/index.md)
-- [Language selection](docs/index.md)
+- [日本語チュートリアル・API](docs/ja/index.md)
+- [Documentation home](docs/index.md)
 
 Sphinx generates the API reference from docstrings for `RobotVarManager`, `TeachingModel`, `TeachingController`, and the
 GUI. Build with `bash docs/build.sh`.
@@ -40,4 +44,4 @@ GUI. Build with `bash docs/build.sh`.
 variable. Automatic teaching to an unused P number is not implemented. Discarding on exit does not undo robot writes
 already performed.
 
-[Changelog](CHANGELOG.en.md)
+[Changelog](CHANGELOG.md)

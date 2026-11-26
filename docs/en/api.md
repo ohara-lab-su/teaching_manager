@@ -24,9 +24,9 @@ Sphinx autodoc generates the method and property lists from the source code.
 :show-inheritance:
 ```
 
-## TeachingWindow (GUI API)
+## GUI launch and window
 
 ```{automodule} teaching_manager.teaching_gui
-:members: TeachingWindow
+:members: run_teaching_gui, TeachingWindow
 :show-inheritance:
 ```
