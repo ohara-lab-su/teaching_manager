@@ -10,16 +10,14 @@ python example/teaching_ur_gui.py
 
 | Device | Default connection configuration | Teaching storage |
 |---|---|---|
-| Cobotta | `example/config_cobotta3_server5.yaml` | Robot P variables, with JSON export available |
+| Cobotta | `example/config_cobotta3_server5.yaml` | Device-side P variables and GUI-side JSON saved after synchronization on exit |
 | UR | `example/ur_server.yaml` | JSON file |
 
-Set `SERVER_IP` and `SERVER_PORT` in the YAML file to match the device server. The UR default is `127.0.0.1:8000`,
-for a server running in the same environment as the launcher. The UR example requires a version of `ur` that
-registers `UrCtrl` with DeviceProxy.
+Set `SERVER_IP` and `SERVER_PORT` to match the running device server. The UR example requires a version of `ur` that registers `UrCtrl` with DeviceProxy.
 
-Both examples default to `example/robot_positions.json`. Set a different `JSON_FILE` in each launcher to keep the
-devices' taught positions separate. Relative paths are resolved against the launcher's directory.
-See [JSON management and robot synchronization](storage.md) for storage and exit behavior.
+Both examples handle `JSON_FILE` on the computer running the GUI. Relative paths are resolved from the launcher's directory. Both default to `robot_positions.json`. Set a distinct `JSON_FILE` in each example to separate COBOTTA's saved list from the UR GUI's teaching data. [Storage and exit behavior](storage.md)
+
+The bundled UR GUI needs a UR server whose control instance is already connected to read the current position. It stores taught points in its local `JSON_FILE`. The launchers in the UR repository pass `methods` to Teaching Manager 0.1.4 and use the UR control instance’s `ROBOT_VAR_FILE` for teaching. When running the GUI as a client, the UR server handles this file. [Launcher configuration](python_api.md)
 
 ## Building Pages
 

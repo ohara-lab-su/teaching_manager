@@ -34,12 +34,23 @@ class TeachingModel:
         filename: str,
         logger: Any = None,
         async_mode: bool = False,
+        *,
+        methods: Optional[Dict[str, str]] = None,
     ) -> None:
-        """既存の変数マネージャーとJSONファイルの場所を設定する。"""
+        """既存の変数マネージャーと JSON ファイルを使って初期化する。
+
+        `methods` の操作名・引数・戻り値は `run_teaching_gui()` と同じ。
+        `manager.robot_instance` に対応するメソッド名を指定する。
+        """
         self._manager = manager
         self._filename = Path(filename)
         self._logger = logger
         self._async_mode = async_mode
+        self._methods = {"current": "get_current_position"}
+        if methods is not None:
+            self._methods.update(methods)
+        if self.uses_point_methods and not {"read", "write"}.issubset(self._methods):
+            raise ValueError("read_all を使うには read と write の指定が必要です")
         self._source = "未読込"
         self._positions: Dict[str, Any] = {}
         self._current_position: Any = None
@@ -50,7 +61,45 @@ class TeachingModel:
     @property
     def has_unsaved_changes(self) -> bool:
         """表示内容が最後に保存したJSON相当の状態と異なるかを返す。"""
+        if self.uses_point_methods:
+            return False
         return self._positions != self._saved_positions
+
+    @property
+    def uses_point_methods(self) -> bool:
+        """教示点の一覧取得と保存を接続先に任せるかを返す。"""
+        return "read_all" in self._methods
+
+    def _call_point_method(self, operation: str, *args: Any) -> Any:
+        if self.robot is None:
+            raise RuntimeError("ロボットが接続されていません")
+        return getattr(self.robot, self._methods[operation])(*args)
+
+    def _point_error(self, message: str) -> RuntimeError:
+        reason = getattr(self.robot, "error_description", None)
+        if callable(reason):
+            reason = reason()
+        if isinstance(reason, str) and reason:
+            return RuntimeError(f"{message}\n{reason}")
+        return RuntimeError(message)
+
+    def read_device_points(self) -> None:
+        """接続先の値付き一覧から実在する P 点を一度で読み込む。"""
+        values = self._call_point_method("read_all")
+        if not isinstance(values, dict):
+            raise self._point_error("教示点の一覧を取得できませんでした")
+        self._positions = self._only_p(values)
+        self._source = "接続先の教示点"
+
+    def _write_device_point(self, number: int, value: Any) -> Any:
+        if self._call_point_method("write", number, value) is not True:
+            raise self._point_error(f"P{number}への書き込みに失敗しました")
+        readback = self._call_point_method("read", number)
+        if readback is False or readback is None:
+            raise self._point_error(f"P{number}の読み戻しに失敗しました")
+        self._positions[f"P{number}"] = readback
+        self._source = "接続先の教示点"
+        return readback
 
     @property
     def has_robot_changes(self) -> bool:
@@ -94,6 +143,8 @@ class TeachingModel:
 
     def save_on_close(self) -> None:
         """終了時にCobottaへの同期後、デフォルトJSONへ保存する。"""
+        if self.uses_point_methods:
+            return
         self.sync_robot()
         self.save_file(allow_empty=True)
 
@@ -212,10 +263,10 @@ class TeachingModel:
         return self._async_mode
 
     async def _read_current_position_async(self) -> Any:
-        """現在位置を取得して保持する。同期・非同期のDeviceProxyを受け付ける。"""
+        """引数なしの現在位置メソッドを呼び、取得した座標をそのまま保持する。"""
         if self.robot is None:
             raise RuntimeError("ロボットが接続されていません")
-        result = self.robot.get_current_position()
+        result = self._call_point_method("current")
         if inspect.isawaitable(result):
             result = await result
         if result is False or result is None:
@@ -224,12 +275,18 @@ class TeachingModel:
         return result
 
     def read_current_position(self) -> Any:
-        """現在位置を取得する。
+        """接続先から現在位置を取得し、後続の教示に使う座標を保持する。
 
-        async_mode=False: 同期実行し、座標を返す。
-        async_mode=True: コルーチンを返す。呼び出し側でawaitする。
+        教示用座標を取得する共通公開 I/F は `get_current_position()`。
+        `methods["current"]` に別名が指定された場合も、同じ契約で
+        引数なしで呼ぶ。座標の表現と単位は接続先の I/F に従う。
 
-        ロボット内部変数およびJSONへの書き込みは行わない。
+        Returns:
+            `async_mode=False` なら取得した座標。`async_mode=True` なら
+            await すると座標が得られるコルーチン。
+
+        Raises:
+            RuntimeError: 未接続、または接続先が False か None を返した場合。
         """
         operation = self._read_current_position_async()
         if self._async_mode:
@@ -262,6 +319,8 @@ class TeachingModel:
         path = self._filename
         if filename is not None:
             path = Path(filename)
+        if self.uses_point_methods and path.resolve() == self._filename.resolve():
+            raise ValueError("運用JSONとは別のファイルを指定してください")
         path.parent.mkdir(parents=True, exist_ok=True)
         # JSONへ書く内容は表示中のP変数だけ。マネージャーの他種変数は含めない。
 
@@ -289,16 +348,25 @@ class TeachingModel:
         self,
         number: int,
     ) -> Any:
-        """現在位置を指定P番号へ書き込み、実機から読み戻す。
+        """取得済みの現在位置を指定 P 番号に教示する。
 
-        明示的な上書き操作専用。GUI側で番号と上書き確認を行う。
-        読み戻し成功後、画面表示とローカルキャッシュを更新する。
-        JSONへの保存は別ボタンで明示的に行う。
+        `methods` で保存先を委譲した場合は `write(番号, 座標)` に座標を
+        そのまま渡し、成功後に `read(番号)` で読み戻す。保存は接続先が
+        担う。従来の JSON 方式では GUI が保存し、COBOTTA の装置方式では
+        装置へ書いて読み戻す。
+
+        Args:
+            number: 0 以上の P 番号。
+
+        Returns:
+            読み戻した座標。従来の JSON 方式では保存した座標。
         """
         if number < 0:
             raise ValueError("P番号は0以上を指定してください")
         if self._current_position is None:
             raise RuntimeError("先に現在位置を取得してください")
+        if self.uses_point_methods:
+            return self._write_device_point(number, self._current_position)
         if not self._uses_robot_memory:
             key = f"P{number}"
             updated = self._positions.copy()
@@ -339,6 +407,8 @@ class TeachingModel:
         if number < 0:
             raise ValueError("P番号は0以上を指定してください")
         empty = [0, 0, 0, 0, 0, 0, -1]
+        if self.uses_point_methods:
+            return self._write_device_point(number, empty)
         if not self._uses_robot_memory:
             key = f"P{number}"
             updated = self._positions.copy()
@@ -376,6 +446,8 @@ class TeachingModel:
 
         Cobottaでは実機とJSONを変更しない。その他はJSONからも削除する。
         """
+        if self.uses_point_methods:
+            raise RuntimeError("接続先の教示点一覧は表示から除外できません")
         updated = self._positions.copy()
         for number in numbers:
             updated.pop(f"P{number}", None)

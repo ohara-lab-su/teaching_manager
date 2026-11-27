@@ -7,14 +7,17 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/ja/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/)
 
-**Version 0.1.3** — ロボット位置のティーチングとP変数のJSON管理を行うPythonパッケージ／PySide6 GUI。
+**Version 0.1.4** — ロボット位置のティーチングとP変数のJSON管理を行うPythonパッケージ／PySide6 GUI。
 
 ## 機能
 
-Cobotta の教示先は実機の P 変数で、一覧は JSON にも保存できます。UR など他の装置の教示先は JSON ファイルです。
-現在位置の取得、指定 P 番号への書き込み、複数行の0クリアと削除、JSON の読み込み・保存、終了時の保存確認に対応します。
+Teaching Manager は、起動例が作った DeviceProxy を受け取り、共通の GUI で現在位置の取得、P 番号への教示、JSON の読み込み・書き出しを行います。
 
-機種別の起動例が接続を組み立て、パッケージの `run_teaching_gui()` が共通の GUI を起動します。
+- **COBOTTA** は装置側の P 変数と GUI 側の JSON の両方を扱います。教示・0クリアは指定した P 点を装置側に書き込み、読み戻します。終了時に「保存」を選ぶと、一覧中の変更点を装置側に同期してから、一覧を既定の JSON に保存します。手動で JSON を書き出すこともできます。
+- **UR の同梱例**は、DeviceProxy で現在位置を取得し、教示点を GUI 側の `JSON_FILE` に保存します。UR 制御側の `ROBOT_VAR_FILE` は別の保存先です。GUI 側の教示で UR 制御側の P 点は更新されません。
+- **機器が教示点を管理する構成**では、起動例から `run_teaching_gui(..., methods=...)` に操作のメソッド名を渡します。[Python API](docs/ja/python_api.md)
+
+Python から保存済み変数を使う場合は、`RobotVarManager.load()` で JSON を全件読み、`list_vars()` とキー参照で値を取得します。欠番を埋める必要はありません。 [Python API](docs/ja/python_api.md)
 
 ## 起動
 

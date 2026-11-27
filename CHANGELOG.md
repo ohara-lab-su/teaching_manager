@@ -7,6 +7,12 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/en/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/index.en.html)
 
+## [0.1.4]
+
+- Document how to retrieve all JSON entries and read sparse P point numbers through the existing variable-management API.
+- Clarify COBOTTA device-side teaching, synchronization and default JSON saving on exit, the bundled UR GUI's client-side file, and use of the existing API by the UR control instance. The variable manager implementation is unchanged.
+- Let launchers pass method names to `run_teaching_gui()`. The GUI reads all points managed by the device at startup and writes and reads back the selected point when teaching.
+
 ## [0.1.3]
 
 - Split the Cobotta and UR launch examples and added `example/ur_server.yaml` for UR connections.

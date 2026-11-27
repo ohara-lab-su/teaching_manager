@@ -8,7 +8,7 @@ import asyncio
 import inspect
 import json
 import sys
-from typing import Any
+from typing import Any, Dict, Optional
 
 from PySide6.QtCore import QThread, Signal, QTimer, Qt
 from PySide6.QtWidgets import (
@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QSpinBox,
+    QLineEdit,
     QTableWidget,
     QTableWidgetItem,
     QMessageBox,
@@ -42,14 +43,30 @@ def run_teaching_gui(
     device_name: str,
     json_file: str,
     logger: Any = None,
+    *,
+    methods: Optional[Dict[str, str]] = None,
 ) -> int:
     """接続オブジェクトを受け取り、教示画面を起動する。
 
+    `get_current_position()` は、機器から教示用の座標を受け取る共通公開
+    I/F。機器を呼ぶコードにメソッド名を直接記述する場合も、実行時に
+    名前を解決する場合も、引数なしで教示に使える座標を取得する。
+    別名の既存 API を使う場合は、同じ契約のメソッド名を `current` に渡す。
+
     Args:
-        robot: 現在位置を取得できる接続オブジェクト。未接続時は None。
-        device_name: Controller が保存方式の判定に使うデバイス名。
-        json_file: 教示点を読み書きする既定の JSON ファイル。
+        robot: DeviceClass のインスタンスまたは同期 DeviceProxy。
+            未接続で画面を開く場合は None。
+        device_name: 画面に表示する名前。従来の構成では保存方式の選択にも使う。
+        json_file: GUI が既定で読み書きする JSON のパス。`read_all` を
+            指定した場合は、手動出力から保護する運用 JSON のパス。
         logger: GUI の構成要素に渡すロガー。
+        methods: 操作名から接続先のメソッド名への辞書。値は文字列。
+            `current` の既定名は `get_current_position`。引数なしで
+            呼び、教示先で受け付ける座標を返すこと。False または None は
+            取得失敗として扱う。`read_all` を指定する場合は `read` と
+            `write` も指定する。`read_all()` は変数名と値の辞書を返す。
+            `read(P番号)` は指定点の値を返す。`write(P番号, 座標)` は
+            成功時に True を返す。GUI は成功後に同じ点を読み戻す。
 
     Returns:
         Qt アプリケーションの終了コード。
@@ -66,6 +83,7 @@ def run_teaching_gui(
         json_file,
         logger=logger,
         async_mode=False,
+        methods=methods,
     )
     controller = TeachingController(
         model,
@@ -119,21 +137,29 @@ class TeachingWindow(QMainWindow):
 
         layout.addWidget(self._status)
         row = QHBoxLayout()
-        self._robot_button = QPushButton("ロボットから指定範囲のP変数を読み込む")
+        robot_read_label = "ロボットから指定範囲のP変数を読み込む"
+        if controller.model.uses_point_methods:
+            robot_read_label = "接続先から教示点を全件読み込む"
+        self._robot_button = QPushButton(robot_read_label)
         self._robot_button.clicked.connect(lambda: self._execute_robot_read())
         self._robot_button.setEnabled(controller.uses_robot_memory)
 
         row.addWidget(self._robot_button)
-        row.addWidget(QLabel("開始P番号"))
+        start_label = QLabel("開始P番号")
+        row.addWidget(start_label)
         self._start_number = QSpinBox()
         self._start_number.setRange(FIRST_P, LAST_P)
         self._start_number.setValue(0)
         row.addWidget(self._start_number)
-        row.addWidget(QLabel("終了P番号"))
+        end_label = QLabel("終了P番号")
+        row.addWidget(end_label)
         self._end_number = QSpinBox()
         self._end_number.setRange(FIRST_P, LAST_P)
         self._end_number.setValue(20)
         row.addWidget(self._end_number)
+        if controller.model.uses_point_methods:
+            for widget in (start_label, self._start_number, end_label, self._end_number):
+                widget.hide()
         self._file_button = QPushButton("JSONファイルから読み込む")
         self._file_button.clicked.connect(self._open_json_file)
 
@@ -171,8 +197,11 @@ class TeachingWindow(QMainWindow):
         self._save_button.clicked.connect(self._save_file)
         row.addWidget(self._save_button)
         row.addWidget(QLabel("指定P番号"))
-        self._number = QSpinBox()
-        self._number.setRange(FIRST_P, LAST_P)
+        if controller.model.uses_point_methods:
+            self._number = QLineEdit("0")
+        else:
+            self._number = QSpinBox()
+            self._number.setRange(FIRST_P, LAST_P)
 
         row.addWidget(self._number)
         self._spec_button = QPushButton("指定P番号に現在位置を書き込む")
@@ -211,7 +240,7 @@ class TeachingWindow(QMainWindow):
         )
 
     def _load_initial_data(self) -> None:
-        """デバイス名に基づきCobottaは実機、それ以外はJSONを読み込む。"""
+        """設定された教示点の保存先から初期表示を読み込む。"""
         start = self._start_number.value()
         end = self._end_number.value()
         self._run_operation(lambda: self._controller.load_initial(start, end), "初期読込")
@@ -344,7 +373,7 @@ class TeachingWindow(QMainWindow):
         QMessageBox.critical(self, "現在位置取得失敗", message)
 
     def _execute_robot_read(self) -> None:
-        """指定範囲のP変数をワーカーで取得する。"""
+        """接続先のP変数をワーカーで取得する。"""
         start = self._start_number.value()
         end = self._end_number.value()
         self._run_operation(lambda: self._controller.read_robot(start, end), "P変数読込")
@@ -357,6 +386,8 @@ class TeachingWindow(QMainWindow):
         storage = "JSON"
         if self._controller.uses_robot_memory:
             storage = "実機P変数"
+        if model.uses_point_methods:
+            storage = "接続先の教示点"
         connection = "なし"
         if connected:
             connection = "あり"
@@ -366,7 +397,7 @@ class TeachingWindow(QMainWindow):
             f"P変数: {len(positions)}件"
         )
         can_read_robot = connected
-        if not self._controller.uses_robot_memory:
+        if not self._controller.uses_robot_memory and not model.uses_point_methods:
             can_read_robot = False
         if self._busy:
             can_read_robot = False
@@ -386,10 +417,12 @@ class TeachingWindow(QMainWindow):
             self._table.setItem(row, 1, QTableWidgetItem(json.dumps(positions[key], ensure_ascii=False)))
         if model.current_position is not None:
             self._position_label.setText("現在位置: " + str(model.current_position))
-        self._hint.setText(
-            "Cobottaは実機P変数へ書き込み（JSON保存は手動）。"
-            "その他はJSONへ自動保存。現在位置の書き込みは単一選択のみ。"
-        )
+        if model.uses_point_methods:
+            self._hint.setText("教示点は接続先が保存します。")
+        elif self._controller.uses_robot_memory:
+            self._hint.setText("装置側へ書き込み、終了時に保存を選ぶと既定JSONにも保存します。")
+        else:
+            self._hint.setText("教示点はGUI側のJSONへ保存します。")
 
     def _selected_number(self) -> int:
         """選択行からP番号を取得する。"""
@@ -404,7 +437,11 @@ class TeachingWindow(QMainWindow):
     def _sync_selected_number(self) -> None:
         """一覧で選んだP番号を指定番号欄にも反映する。"""
         try:
-            self._number.setValue(self._selected_number())
+            number = self._selected_number()
+            if self._controller.model.uses_point_methods:
+                self._number.setText(str(number))
+            else:
+                self._number.setValue(number)
         except ValueError:
             pass
         can_write_selected = len(self._table.selectionModel().selectedRows()) == 1
@@ -427,13 +464,15 @@ class TeachingWindow(QMainWindow):
         action = menu.addAction("選択したP番号に現在位置を書き込む")
         action.setEnabled(len(self._selected_numbers()) == 1)
         delete_action = menu.addAction("選択したP番号を0クリア（未使用値を書き込む）")
-        remove_action = menu.addAction("選択したP番号を一覧から削除")
+        remove_action = None
+        if not self._controller.model.uses_point_methods:
+            remove_action = menu.addAction("選択したP番号を一覧から削除")
         chosen = menu.exec(self._table.viewport().mapToGlobal(point))
         if chosen == action:
             self._teach_selected()
         if chosen == delete_action:
             self._clear_selected()
-        if chosen == remove_action:
+        if remove_action is not None and chosen == remove_action:
             self._delete_selected()
 
     def _clear_selected(self) -> None:
@@ -537,7 +576,19 @@ class TeachingWindow(QMainWindow):
 
     def _teach_specified(self) -> None:
         """番号入力欄のP番号への書き込みを確認する。"""
-        self._write_number(self._number.value())
+        if self._controller.model.uses_point_methods:
+            text = self._number.text().strip()
+            try:
+                number = int(text)
+            except ValueError:
+                QMessageBox.warning(self, "番号未指定", "P番号を整数で入力してください")
+                return
+            if number < 0:
+                QMessageBox.warning(self, "番号が不正", "P番号は0以上を指定してください")
+                return
+        else:
+            number = self._number.value()
+        self._write_number(number)
 
     def _write_number(self, number: int) -> None:
         """上書きの危険を明示し、承認された場合だけModelへ書き込みを依頼する。"""

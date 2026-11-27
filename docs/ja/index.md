@@ -7,23 +7,16 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/ja/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/)
 
-**Version 0.1.3**
+**Version 0.1.4**
 
-Teaching Manager は、ロボットの座標をティーチングし、番号付きの位置変数（P変数）として管理するためのGUIソフトウェアです。主な目的は、
-**ロボットコントローラ内部の変数メモリに依存せず、ロボットの座標を外部で管理すること**
-です。座標データをローカルで保持し、JSONファイルに保存することで、ロボット内部のP変数領域とは独立して運用できます。
-
-接続したロボットから現在位置を取得し、指定したP番号に対応付けて座標一覧を管理します。`RobotVarManager`
-により、Pythonからの変数キャッシュ操作、JSONの読み書き、ロボットとの明示的な変数転送にも対応しています。
+デバイスごとの起動例が同期 DeviceProxy を渡し、共通 GUI が現在位置の取得と教示を行います。Python から JSON を扱う場合は `RobotVarManager` を単独で利用できます。
 
 ## 座標の保存方式
 
-実装では、デバイス名に応じて次の2方式を切り替えます。
+Teaching Manager は、起動例が作った DeviceProxy を受け取り、共通の GUI で現在位置の取得、P 番号への教示、JSON の読み込み・書き出しを行います。
 
-- **`CobottaCtrl` 以外のデバイス：** ロボット内部のP変数メモリを使わず、JSONで座標を管理します。ティーチング、クリア、削除はJSONに反映されます。
-- **`CobottaCtrl`：** ロボット内部のP変数を使用します。指定番号へのティーチングやクリアでは実機へ書き込み、読み戻して結果を確認します。JSONへの保存は別操作です。
-
-したがって、外部での座標管理が中心的な用途ですが、既存実装には `CobottaCtrl` 用の実機P変数管理機能も残されています。
+- **COBOTTA** は装置側の P 変数と GUI 側の JSON の両方を扱います。教示・0クリアは指定した P 点を装置側に書き込み、読み戻します。終了時に「保存」を選ぶと、一覧中の変更点を装置側に同期してから、一覧を既定の JSON に保存します。手動で JSON を書き出すこともできます。
+- **UR の同梱例**は、DeviceProxy で現在位置を取得し、教示点を GUI 側の `JSON_FILE` に保存します。UR 制御側の `ROBOT_VAR_FILE` は別の保存先です。GUI 側の教示で UR 制御側の P 点は更新されません。
 
 ## 主な機能
 

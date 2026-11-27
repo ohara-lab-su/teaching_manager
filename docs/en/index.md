@@ -7,29 +7,16 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/en/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/index.en.html)
 
-**Version 0.1.3**
+**Version 0.1.4**
 
-Teaching Manager provides a graphical interface for teaching robot positions and managing numbered position variables (P
-variables). Its primary purpose is to manage robot coordinates **outside the robot's internal variable memory**, using
-local data and JSON files. This allows position data to be maintained independently of the robot controller's built-in
-P-variable storage.
-
-The software reads the robot's current position through a connected device interface, assigns that position to a
-selected P number, and stores the resulting position table. A `RobotVarManager` class also provides a Python interface
-for managing cached variables, loading and saving JSON, and explicitly transferring variables to or from a connected
-robot.
+Device-specific launchers supply a synchronous DeviceProxy to the shared GUI for position retrieval and teaching. Python applications can use `RobotVarManager` independently to manage JSON data.
 
 ## Storage behavior
 
-The implementation supports two storage modes selected by the device name:
+Teaching Manager uses the DeviceProxy supplied by a launcher. Its shared GUI reads the current position, teaches numbered P points, and imports or exports JSON.
 
-- **Devices other than `CobottaCtrl`:** P variables are managed in JSON rather than in the robot's internal variable
-  memory. Teaching, clearing, and deleting entries update the JSON data.
-- **`CobottaCtrl`:** the application uses the robot's internal P variables. Explicit teaching or clearing writes to the
-  robot and reads the result back. JSON export is available separately.
-
-This distinction matters: external coordinate management is the primary use case, but the existing code retains a
-robot-memory mode for `CobottaCtrl`.
+- **COBOTTA** uses both device-side P variables and a JSON file on the GUI computer. Teaching and clearing write and read back the selected point. Choosing Save on exit synchronizes changed points that are still listed, then writes the displayed list to the default JSON file. You can also export the list manually.
+- **The bundled UR example** reads the current position through DeviceProxy and stores taught points in `JSON_FILE` on the GUI computer. The UR control instance has its own `ROBOT_VAR_FILE`. Teaching in this GUI leaves the control instance’s P points unchanged.
 
 ## Main functions
 

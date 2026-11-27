@@ -2,6 +2,30 @@
 
 Teaching Manager は、ロボットの現在位置を読み取り、指定した P 番号と結び付けて管理する末端ツールです。座標を GUI 側の JSON で管理する方式を基本とし、`CobottaCtrl` にはロボット内部の P 変数を読み書きする既存機能があります。装置ごとの接続処理は起動例にあり、画面の生成、教示操作、保存処理はパッケージにあります。
 
+## 機器制御クラスとの境界
+
+`RobotVarManager` の全件読込・保存は `load()` と `save()`、全件参照は `list_vars()` と `manager[key]`、一点の操作は `get_var()`、`set_var()`、`delete_var()`。呼び出し元が座標の表現と単位、自動／即時／遅延保存の組み合わせを決める。UR はこれらのキャッシュと JSON の操作を使い、別系統の機器属性による同期 API も本体に残る。
+
+本体のすべてのメソッドの docstring を現行処理に合わせた。保存失敗は呼び出し元に伝わり、`set_var(save=True)` のキャッシュ更新は既に実行されている。ここで使う `save()` はファイルを直接開く。コードの実行部分は AST 比較で一致した。
+
+## 現行の基準
+
+版設定は Teaching Manager 0.1.4。変数管理と同梱の起動例は 0.1.3 と同じ。共通起動関数は `run_teaching_gui(robot, device_name, json_file, logger=None, *, methods=None)`。COBOTTA は指定 P 点の装置側読み書きと、終了時の同期・既定 JSON 保存を両方行う。UR の同梱例は現在位置を取得し、GUI 側 `JSON_FILE` に書く。以下の古い接続障害とコミット番号は当時の調査記録。UR リポジトリの起動例は `methods` に位置取得・全件取得・個別読み書きのメソッド名を渡す。Model が `getattr` で実体または DeviceProxy を呼び、JSON 保存はその制御実体が担う。教示用の現在位置を取得する共通公開 I/F は `get_current_position()`。メソッド名を直接記述する場合も動的に解決する場合も、引数なしで呼び、得た座標を変換せず教示に使う。別名を指定する場合も、同じ契約を満たすメソッドを渡す。失敗値と全件・個別読み書きの契約は [Python API](docs/ja/python_api.md) を参照。任意のメソッド名を使った大きな番号・欠番付きの教示、従来の COBOTTA の装置側書き込みと終了時同期・既定 JSON 保存、UR のローカル／クライアント起動例で教示した P3000 を `move("P3000")` から参照できることまで模擬検証済み。Qt の画面と実機は未確認。
+
+## UR 0.0.18 との位置変数の受け渡し
+
+`RobotVarManager` は JSON に実在するキーで位置を保持する。`get_var("P", 番号)` は一件だけ取得し、未定義なら指定された既定値を返す。`load()` は JSON を全件読み込む。`list_vars()` で実在するキーを取得し、`manager[key]` で値を参照する。装置を接続先として渡しても、この取得で装置のメモリーを読み直すことはない。UR 0.0.18 は設定済みの `ROBOT_VAR_FILE` から生成したマネージャーを使用し、既存の `get_all_var()` で同じ実在キーと値を返す。COBOTTA の装置側 P 変数は従来の DeviceProxy 経路で読む。連番、固定件数、固定の番号上限を前提にしない。
+
+Teaching Manager は既存の `delete_var("P", 番号)` と `save()` を提供する。UR 0.0.18 では、指定された実在 P 点の削除にこの二つを使う。複数点を指定された場合の保存回数は UR 側で調整する。COBOTTA の装置側処理と終了時の JSON 保存は従来どおり。
+
+模擬試験で、欠番を含む `P100`、`P1000`、`P1001`、`P20000000000` の取得、未定義番号の失敗、指定キーだけの削除、保存一回と JSON 再読込を確認した。ローカルの UR と同期 DeviceProxy を既存の FastAPI 経路で検証した。実機接続は未実施。
+
+### COBOTTA 由来の取り込みと全件取得
+
+COBOTTA の P 変数の割当は、全体のメモリ容量からユーザーが別レジスタで設定する。割当件数は可変で、固定の終端番号を前提にしない。添付 `cobotta2.zip` の `RobotVarManager.read_vars_from_robot("P", start, end)` は、与えられた範囲の両端を含めて値を取り込み、空スロットの値も保持する。添付例の 0〜300 はその例の入力値である。JSON を保存元にする場合の全件取得は、その JSON から読み込んだ実在キーと値が対象で、欠番は作らない。
+
+模擬装置から 4 スロットを取り込み、未使用の座標値と `None` を含めて全件取得できることを確認した。読み込んだ JSON に `P100` と `P1000` だけがある場合は二件だけ取得できた。どちらの場合も `list_vars()` とキー参照は保持中の値を返し、装置への追加アクセスは発生しなかった。
+
 ## 1. 引継ぎ時点の状態
 
 | 対象 | ソースで確認した状態 | 実行で確認できた範囲 |
@@ -33,7 +57,7 @@ Window は通信やファイル操作を `QThread` に渡し、一度に一件�
 
 - **接続 YAML** は各装置パッケージの `Config` が読み、Teaching Manager は設定オブジェクトをクライアントに渡します。提示された Cobotta と UR の同期 ClientClass は `SERVER_IP` と `SERVER_PORT` を読み、HTTP の接続先を組み立てます。`COBOTTA_IP` / `ROBOT_IP` はサーバー側の装置設定です。少なくとも確認した同期クライアントでは、YAML の `TIMEOUT` を基底クライアントに渡す処理はありません。Cobotta の提示ログには実際のタイムアウトとして `60.0` が出ています。
 - **Cobotta** の起動例が参照するのは [config_cobotta3_server5.yaml](example/config_cobotta3_server5.yaml) です。[config_cobotta1_server1.yaml](example/config_cobotta1_server1.yaml) は別の接続先の設定です。Cobotta パッケージは `CobottaCtrl` と別名 `cobotta` を Factory に登録し、同期経路では `SyncCobottaClient` を選びます。HTTP 側の公開名は `cobotta` です。サーバー側の `CobottaCtrl` は現在位置と変数操作を b-CAP または ORiN2 のバックエンドに委譲します。
-- **UR** の起動例は [ur_server.yaml](example/ur_server.yaml) の絶対パスを渡します。提供された `Config` は、相対パスでも呼び出し元のスクリプトを基準に解決します。以前の「作業ディレクトリ基準」という説明は誤りです。現行 YAML の接続先は `127.0.0.1:8000` です。UR サーバーが別のホストで動く構成なら、GUI 側の YAML にはそのサーバーの到達可能なアドレスを指定します。
+- **UR** の起動例は [ur_server.yaml](example/ur_server.yaml) の絶対パスを渡します。提供された `Config` は、相対パスでも呼び出し元のスクリプトを基準に解決します。以前の「作業ディレクトリ基準」という説明は誤りです。接続先は実際に起動するサーバーに合わせて YAML の `SERVER_IP` と `SERVER_PORT` で指定します。UR サーバーが別のホストで動く構成なら、GUI 側の YAML にはそのサーバーの到達可能なアドレスを指定します。
 - **UR の現在位置取得**は `SyncURClient → ese774 の API ディスパッチ → UrRouterCtrl / ur_ctrl_api_spec → UrCtrl → UrRtde → RTDEReceiveInterface.getActualTCPPose()` の経路です。HTTP 側の公開名は `ur` で、戻り値は `[x, y, z, rx, ry, rz]` の 6 成分です。位置は mm、姿勢は degree 表記の回転ベクトルです。Cobotta の通常の P 形式は末尾に `fig` を含む 7 成分です。GUI は座標系・姿勢・成分数を変換せず、受け取った値を保持します。
 
 SUSANOO の DeviceClass はサーバー側で装置処理を実装し、DeviceServer がその API を公開します。利用側の ClientClass はその操作を代理します。`DeviceProxy()` はクライアントプロセス内で登録名から ClientClass を選ぶ Factory です。Factory の登録名、HTTP の公開名、Teaching Manager の画面表示・保存モード用の名前は、それぞれ別の役割を持ちます。
