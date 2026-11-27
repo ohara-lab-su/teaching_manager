@@ -29,10 +29,9 @@ class TeachingController:
         self._model = model
         self._device_name = device_name
 
-        if device_name == "CobottaCtrl":
+        self._uses_robot_memory = False
+        if not model.uses_point_methods and device_name == "CobottaCtrl":
             self._uses_robot_memory = True
-        else:
-            self._uses_robot_memory = False
 
         self._model.set_storage_mode(self._uses_robot_memory)
         self._logger = logger
@@ -58,8 +57,8 @@ class TeachingController:
         end: int,
     ) -> None:
         """明示設定に従って初期データを読み込む。"""
-        if self._uses_robot_memory:
-            self._model.read_robot(start, end)
+        if self._model.uses_point_methods or self._uses_robot_memory:
+            self.read_robot(start, end)
         else:
             self._model.load_file()
 
@@ -69,6 +68,9 @@ class TeachingController:
         end: int,
     ) -> None:
         """指定範囲のP変数を実機から読み込む。"""
+        if self._model.uses_point_methods:
+            self._model.read_device_points()
+            return
         if not self._uses_robot_memory:
             raise RuntimeError(
                 "このデバイスのP変数はJSON管理です。JSONから読み込んでください"
@@ -89,7 +91,11 @@ class TeachingController:
         self._model.save_file(filename=filename)
 
     def read_current_position(self) -> Any:
-        """現在位置を取得する。同期/非同期モードはModel設定に従う。"""
+        """Model に現在位置の取得を委譲する。
+
+        接続先の既定メソッドは `get_current_position()`。座標を直接返すか、
+        await が必要かは Model の `async_mode` に従う。
+        """
         return self._model.read_current_position()
 
     def teach_number(

@@ -7,6 +7,12 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/ja/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/)
 
+## [0.1.4]
+
+- 日英 README と Pages に、既存の変数管理 API で JSON の全件と欠番付きの P 点を取得する方法を記載した。
+- COBOTTA の装置側教示・終了時の同期と既定 JSON 保存、UR 同梱 GUI のクライアント側保存、UR 制御実体からの既存 API の利用を明記した。変数管理の実装は従来どおり。
+- `run_teaching_gui()` にメソッド名を渡せるようにした。機器が管理する教示点を起動時に全件取得し、教示時は指定の一点を書いて読み戻す。
+
 ## [0.1.3]
 
 - Cobotta と UR の起動例を分け、UR 用の接続設定 `example/ur_server.yaml` を追加。

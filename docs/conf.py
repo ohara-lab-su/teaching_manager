@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 project = "Teaching Manager"
-release = "0.1.3"
+release = "0.1.4"
 version = release
 master_doc = "index"
 language = os.environ.get("TEACHING_DOC_LANGUAGE", "en")

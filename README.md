@@ -7,15 +7,17 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Documentation-222222?logo=githubpages&logoColor=white)](https://ohara-lab-su.github.io/teaching_manager/en/)
 [![Ohara Lab](https://img.shields.io/badge/Ohara%20Lab-Home-4B5563?logo=homeassistant&logoColor=white)](https://ohara-lab-su.github.io/index.en.html)
 
-**Version 0.1.3** — A Python package and PySide6 GUI for robot position teaching and P-variable management.
+**Version 0.1.4** — A Python package and PySide6 GUI for robot position teaching and P-variable management.
 
 ## Features
 
-Cobotta teaching updates the robot's P variables and can also save the table as JSON. UR and other devices store
-taught positions in JSON. The application supports current-position retrieval, teaching to a specified P number,
-clearing and removing multiple rows, JSON loading and saving, and save confirmation on exit.
+Teaching Manager uses the DeviceProxy supplied by a launcher. Its shared GUI reads the current position, teaches numbered P points, and imports or exports JSON.
 
-Each device-specific example creates its connection. The package's `run_teaching_gui()` starts the shared GUI.
+- **COBOTTA** uses both device-side P variables and a JSON file on the GUI computer. Teaching and clearing write and read back the selected point. Choosing Save on exit synchronizes changed points that are still listed, then writes the displayed list to the default JSON file. You can also export the list manually.
+- **The bundled UR example** reads the current position through DeviceProxy and stores taught points in `JSON_FILE` on the GUI computer. The UR control instance has its own `ROBOT_VAR_FILE`. Teaching in this GUI leaves the control instance’s P points unchanged.
+- **For device-managed teaching**, the launcher passes operation method names to `run_teaching_gui(..., methods=...)`. [Python API](docs/en/python_api.md)
+
+To use saved variables from Python, load the entire JSON file with `RobotVarManager.load()`, then read the values via `list_vars()` and key lookup. Gaps remain absent. [Python API](docs/en/python_api.md)
 
 ## Launch
 

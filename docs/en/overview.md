@@ -1,6 +1,6 @@
 # Overview and architecture
 
-Version 0.1.3 provides position retrieval, teaching to P variables, JSON import/export, clearing and removing rows, and
+Version 0.1.4 provides position retrieval, teaching to P variables, JSON import/export, clearing and removing rows, and
 save confirmation on exit.
 
 - `src/teaching_manager/teaching_gui.py`: Qt View, dialogs, table, and workers.
